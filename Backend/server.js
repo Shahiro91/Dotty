@@ -865,20 +865,20 @@ app.post('/api/local-applications', rateLimit('application', 10, 60 * 60_000), a
       return res.status(409).json({ error: 'Ese celular ya tiene una cuenta. Ingresá con esa cuenta para solicitar el alta del local.' })
     }
     const { rows: existingApplications } = await client.query(
-      "SELECT id FROM local_applications WHERE phone = $1 AND status IN ('pending', 'contacted', 'approved')",
+      "SELECT id, status FROM local_applications WHERE phone = $1 AND status IN ('pending', 'contacted', 'approved') ORDER BY created_at DESC LIMIT 1",
       [phone],
     )
-    if (existingApplications[0]) {
-      await client.query('ROLLBACK')
-      transactionStarted = false
-      return res.status(409).json({ error: 'Ya existe una solicitud o un local asociado a ese celular.' })
-    }
     const passwordHash = await bcrypt.hash(password, 12)
     await client.query(
       `INSERT INTO customers (first_name, last_name, phone, password_hash, role)
        VALUES ($1, $2, $3, $4, 'customer')`,
       [firstName, lastName, phone, passwordHash],
     )
+    if (existingApplications[0]) {
+      await client.query('COMMIT')
+      transactionStarted = false
+      return res.status(200).json({ applicationId: existingApplications[0].id, status: existingApplications[0].status })
+    }
     const { rows } = await client.query(
       'INSERT INTO local_applications (first_name, last_name, phone, business_name, requested_plan) VALUES ($1, $2, $3, $4, $5) RETURNING id, status',
       [firstName, lastName, phone, businessName, requestedPlan],
@@ -888,6 +888,7 @@ app.post('/api/local-applications', rateLimit('application', 10, 60 * 60_000), a
     res.status(201).json({ applicationId: rows[0].id, status: rows[0].status })
   } catch (error) {
     if (transactionStarted) await client.query('ROLLBACK')
+    if (error.code === '23505') return res.status(409).json({ error: 'Ese celular ya tiene una cuenta o una solicitud.' })
     next(error)
   } finally {
     client.release()
