@@ -1,0 +1,14 @@
+.section { padding: 35px 0 66px; border-top: 1px solid var(--line); }
+.heading { margin-bottom: 19px; }
+.kicker { color: var(--tomato); font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.heading h2 { margin: 4px 0 0; font-family: var(--serif); font-size: 30px; }
+.list { display: grid; gap: 11px; }
+.review { padding: 16px; display: flex; align-items: flex-start; gap: 12px; border: 1px solid #eee8e2; border-radius: 9px; background: #fff; box-shadow: 0 3px 12px rgba(52, 36, 24, .035); }
+.avatar { width: 34px; height: 34px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 50%; background: #f7e7df; color: var(--tomato); font-family: var(--serif); font-weight: 700; }
+.body { min-width: 0; flex: 1; }
+.meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.meta strong { color: var(--ink); font-size: 13px; }
+.stars { display: flex; gap: 1px; margin-top: 2px; color: #d8a85f; }
+.verified { padding: 3px 7px; display: inline-flex; align-items: center; gap: 3px; border-radius: 999px; background: #f6f1eb; color: #64574d; font-size: 9px; white-space: nowrap; }
+.review blockquote { margin: 7px 0 0; color: #81776e; font-size: 12px; font-style: italic; line-height: 1.5; }
+@media (max-width: 760px) { .section { padding: 28px 0 47px; } .heading h2 { font-size: 27px; } .review { padding: 13px; gap: 9px; } .avatar { width: 30px; height: 30px; } .review blockquote { font-size: 11px; } }

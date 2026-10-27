@@ -1,0 +1,28 @@
+databases:
+  - name: sabor-vivo-db
+    plan: free
+    databaseName: sabor_vivo
+
+services:
+  - type: web
+    name: sabor-vivo
+    runtime: node
+    plan: free
+    buildCommand: npm --prefix FrontEnd ci && npm --prefix FrontEnd run build && npm --prefix Backend ci
+    startCommand: npm --prefix Backend start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: DATABASE_URL
+        fromDatabase:
+          name: sabor-vivo-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ADMIN_PASSWORD_2
+        sync: false
+      - key: MP_ENVIRONMENT
+        value: sandbox
+      - key: MP_ACCESS_TOKEN
+        sync: false

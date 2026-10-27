@@ -1,0 +1,49 @@
+.page { margin-top: 22px; display: grid; gap: 15px; }
+.header { display: flex; align-items: start; justify-content: space-between; gap: 16px; }
+.eyebrow { color: var(--store-secondary, #58705e); font-size: 9px; font-weight: 850; }
+.header h2 { margin: 5px 0; color: #303a33; font-family: var(--business-heading-font, var(--serif)); font-size: 22px; }
+.header p { margin: 0; color: #777d75; font-size: 11px; line-height: 1.5; }
+.templateButton, .importButton { min-height: 36px; padding: 0 11px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid #d9dcd4; border-radius: 4px; background: #fffefa; color: #465047; cursor: pointer; font: inherit; font-size: 10px; font-weight: 750; }
+.templateButton { flex: 0 0 auto; }
+.instructions { padding: 11px 13px; display: grid; gap: 5px; border-left: 3px solid var(--store-secondary, #58705e); background: #eeefe8; color: #6d746c; font-size: 10px; line-height: 1.5; }
+.instructions strong { color: #39433c; font-size: 10px; }
+.filePicker { min-height: 72px; padding: 12px 14px; display: flex; align-items: center; gap: 12px; border: 1px dashed #b9c1b8; border-radius: 5px; background: #fffefa; color: var(--store-secondary, #58705e); cursor: pointer; }
+.filePicker:hover { border-color: var(--store-primary, #c95031); background: #fffdf8; }
+.filePicker input { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; clip-path: inset(50%); }
+.filePicker span { min-width: 0; display: grid; gap: 4px; }
+.filePicker strong { overflow: hidden; color: #38423b; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.filePicker small { color: #82877f; font-size: 9px; }
+.locked { min-height: 330px; display: grid; place-items: center; border: 1px solid #e1e1d9; border-radius: 6px; background: #fffefa; }
+.lockContent { width: min(420px, 100%); padding: 30px 20px; display: flex; align-items: center; flex-direction: column; text-align: center; }
+.lockIcon { width: 48px; height: 48px; margin-bottom: 14px; display: grid; place-items: center; border-radius: 50%; background: color-mix(in srgb, var(--store-secondary, #58705e), white 88%); color: var(--store-secondary, #58705e); }
+.locked h2 { margin: 14px 0 5px; color: #2d3932; font-family: var(--business-heading-font, var(--serif)); font-size: 20px; }
+.locked p { max-width: 360px; margin: 0; color: #777d75; font-size: 12px; line-height: 1.55; }
+.vip { width: fit-content; padding: 5px 8px; border-radius: 4px; background: #f4e4bd; color: #5f4c25; font-size: 10px; font-weight: 800; }
+.lockedAction { min-height: 36px; margin-top: 18px; padding: 0 12px; border: 1px solid #deded5; border-radius: 4px; background: #f4f3ed; color: #777d75; font: inherit; font-size: 11px; font-weight: 750; }
+.errorList { padding: 11px 12px; display: grid; gap: 6px; border-radius: 4px; background: #faeae6; color: #a13c2a; font-size: 10px; }
+.errorList > strong { display: flex; align-items: center; gap: 6px; font-size: 10px; }
+.errorList > span { line-height: 1.45; }
+.errorList > small { font-size: 9px; }
+.success { margin: 0; padding: 10px 12px; display: flex; align-items: flex-start; gap: 7px; border-radius: 4px; background: #eaf3e8; color: #3b6440; font-size: 10px; line-height: 1.5; }
+.success svg { flex: 0 0 auto; }
+.preview { padding: 14px; display: grid; gap: 13px; border: 1px solid #e1e1d9; border-radius: 5px; background: #fffefa; }
+.previewHeader h3 { margin: 0; color: #343e37; font-size: 12px; }
+.previewHeader p { margin: 4px 0 0; color: #82877f; font-size: 9px; }
+.tableSection { min-width: 0; }
+.tableSection h4 { margin: 0 0 6px; color: #657067; font-size: 9px; font-weight: 800; }
+.tableWrap { overflow-x: auto; }
+.tableSection table { width: 100%; border-collapse: collapse; text-align: left; }
+.tableSection th, .tableSection td { padding: 7px 8px; border-bottom: 1px solid #ecece5; font-size: 9px; white-space: nowrap; }
+.tableSection th { color: #727970; font-weight: 750; }
+.tableSection td { color: #39423b; }
+.categoryPreview { margin: 0; color: #70776e; font-size: 9px; line-height: 1.5; }
+.importButton { width: fit-content; border-color: var(--store-primary, #c95031); background: var(--store-primary, #c95031); color: white; }
+.importButton:hover { filter: brightness(.94); }
+.importButton:disabled { opacity: .6; cursor: wait; }
+.spinner { animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (max-width: 640px) {
+  .header { align-items: stretch; flex-direction: column; }
+  .templateButton { width: fit-content; }
+  .preview { padding: 11px; }
+}

@@ -1,0 +1,12 @@
+.header { height: 64px; padding: 0 max(22px, calc((100vw - 1160px) / 2)); display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 10; border-bottom: 1px solid rgba(63, 40, 29, .1); background: rgba(255, 254, 251, .96); backdrop-filter: blur(16px); }
+.brand { display: inline-flex; align-items: center; gap: 9px; color: var(--ink); font-family: var(--serif); font-size: 20px; font-weight: 700; text-decoration: none; }
+.brandMark { width: 33px; height: 33px; display: grid; place-items: center; border-radius: 50%; background: var(--tomato); color: #fffaf3; }
+.actions { display: flex; align-items: center; gap: 9px; }
+.accountButton { min-height: 38px; padding: 0 12px; display: flex; align-items: center; gap: 7px; border: 1px solid var(--line); border-radius: 20px; background: transparent; color: var(--ink); cursor: pointer; font-size: 12px; font-weight: 700; }
+.accountButton:hover { border-color: #e7c7b3; color: var(--tomato); background: #faeee7; }
+.iconButton, .bagButton { width: 40px; height: 40px; display: grid; place-items: center; position: relative; border: 0; border-radius: 50%; background: transparent; color: var(--ink); cursor: pointer; transition: background .2s, color .2s; }
+.iconButton:hover, .active { color: var(--tomato); background: #faeee7; }
+.bagButton { background: var(--tomato); color: white; }
+.bagButton:hover { background: var(--tomato-dark); }
+.bagButton span { min-width: 18px; height: 18px; padding: 0 3px; display: grid; place-items: center; position: absolute; top: -3px; right: -4px; border-radius: 99px; background: #f0d2a4; color: #55371f; font-size: 11px; font-weight: 800; }
+@media (max-width: 760px) { .header { height: 58px; padding: 0 14px; } .brand { gap: 7px; font-size: 18px; } .brandMark { width: 31px; height: 31px; } .actions { gap: 2px; } .accountButton { min-height: 35px; padding: 0 9px; gap: 5px; font-size: 11px; } .iconButton, .bagButton { width: 36px; height: 36px; } }

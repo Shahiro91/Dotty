@@ -1,0 +1,18 @@
+.hero { min-height: 500px; display: flex; align-items: center; position: relative; isolation: isolate; color: white; background: #33261e url('https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=2000&q=90') center 52% / cover no-repeat; }
+.hero::before { content: ''; position: absolute; inset: 0; z-index: -1; background: linear-gradient(90deg, rgba(26, 20, 16, .82), rgba(31, 22, 15, .58) 49%, rgba(31, 22, 15, .08)), linear-gradient(0deg, rgba(29, 20, 14, .25), transparent 48%); }
+.content { width: min(1160px, calc(100% - 48px)); margin: 0 auto; padding: 70px 0 86px; animation: riseIn .65s both; }
+.eyebrow { width: fit-content; padding: 7px 12px; display: flex; align-items: center; gap: 8px; border: 1px solid rgba(255, 255, 255, .34); border-radius: 999px; background: rgba(255, 248, 237, .14); color: #fff5e6; font-size: 13px; font-weight: 700; }
+.hero h1 { max-width: 660px; margin: 15px 0 10px; color: white; font-family: var(--serif); font-size: clamp(56px, 8vw, 86px); line-height: .98; }
+.description { max-width: 510px; color: rgba(255, 255, 255, .87); font-size: 18px; line-height: 1.55; }
+.actions { display: flex; flex-wrap: wrap; gap: 11px; margin-top: 26px; }
+.primaryButton, .whatsappButton { min-height: 47px; padding: 0 20px; display: inline-flex; align-items: center; justify-content: center; gap: 9px; border-radius: 999px; color: white; font-weight: 700; text-decoration: none; transition: transform .2s, background .2s; }
+.primaryButton { background: var(--tomato); }
+.primaryButton:hover { transform: translateY(-2px); background: var(--tomato-dark); }
+.whatsappButton { border: 1px solid rgba(255, 255, 255, .48); background: rgba(255, 255, 255, .12); backdrop-filter: blur(8px); }
+.whatsappButton:hover { transform: translateY(-2px); background: rgba(255, 255, 255, .2); }
+.openNote { position: absolute; right: max(24px, calc((100vw - 1160px) / 2)); bottom: 24px; display: flex; align-items: center; gap: 8px; color: rgba(255, 255, 255, .9); font-size: 13px; }
+.openNote span { width: 8px; height: 8px; border-radius: 50%; background: #7acb74; box-shadow: 0 0 0 4px rgba(122, 203, 116, .17); }
+@keyframes riseIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+@media (min-width: 1300px) { .hero { min-height: 550px; } }
+@media (max-width: 760px) { .hero { min-height: 388px; background-position: 54% center; } .hero::before { background: linear-gradient(90deg, rgba(28, 20, 15, .72), rgba(30, 21, 15, .22)), linear-gradient(0deg, rgba(24, 17, 12, .5), transparent 72%); } .content { width: calc(100% - 32px); padding: 55px 0 75px; } .eyebrow { padding: 6px 10px; font-size: 11px; } .hero h1 { margin-top: 13px; font-size: clamp(50px, 15vw, 64px); } .description { max-width: 360px; font-size: 15px; } .actions { gap: 9px; margin-top: 20px; } .primaryButton, .whatsappButton { min-height: 44px; padding: 0 16px; font-size: 13px; } .openNote { right: 17px; bottom: 14px; font-size: 11px; } }
+@media (prefers-reduced-motion: reduce) { .content, .primaryButton, .whatsappButton { animation-duration: .01ms; transition-duration: .01ms; } }

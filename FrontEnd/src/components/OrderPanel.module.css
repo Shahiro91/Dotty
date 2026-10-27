@@ -1,0 +1,36 @@
+.floatingOrder { min-height: 52px; padding: 0 16px; display: flex; align-items: center; gap: 10px; position: fixed; right: max(22px, calc((100vw - 1160px) / 2)); bottom: 20px; z-index: 12; border: 0; border-radius: 999px; background: var(--tomato); color: white; box-shadow: 0 8px 24px rgba(92, 43, 27, .27); cursor: pointer; font-size: 13px; font-weight: 800; }
+.floatingOrder:hover, .checkout:hover { background: var(--tomato-dark); }
+.floatingOrder strong { padding-left: 9px; border-left: 1px solid rgba(255, 255, 255, .35); }
+.floatingBag { display: grid; place-items: center; position: relative; }
+.floatingBag b { min-width: 15px; height: 15px; display: grid; place-items: center; position: absolute; top: -7px; right: -8px; border-radius: 50%; background: #f0d2a4; color: #533b2b; font-size: 9px; }
+.toast { padding: 11px 16px; display: flex; align-items: center; gap: 8px; position: fixed; z-index: 20; bottom: 85px; left: 50%; transform: translateX(-50%); border-radius: 999px; background: var(--ink); color: white; box-shadow: 0 7px 22px rgba(25, 19, 15, .2); font-size: 13px; white-space: nowrap; animation: riseIn .2s both; }
+.backdrop { display: flex; justify-content: flex-end; position: fixed; inset: 0; z-index: 30; background: rgba(24, 19, 16, .46); backdrop-filter: blur(3px); animation: fadeIn .18s both; }
+.dialog { width: min(440px, 100%); height: 100%; padding: 28px; display: flex; flex-direction: column; background: #fffdfa; box-shadow: -12px 0 40px rgba(25, 19, 15, .15); animation: slideIn .25s both; }
+.heading { padding-bottom: 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); }
+.heading h2 { margin: 2px 0 0; font-family: var(--serif); font-size: 30px; }
+.kicker { color: var(--tomato); font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.closeButton { width: 38px; height: 38px; display: grid; place-items: center; border: 0; border-radius: 50%; background: transparent; color: var(--ink); cursor: pointer; }
+.closeButton:hover { background: #faeee7; color: var(--tomato); }
+.empty { flex: 1; display: grid; place-content: center; justify-items: center; gap: 15px; color: var(--muted); }
+.empty > svg { color: var(--tomato); }
+.empty button { min-height: 42px; padding: 0 16px; border: 0; border-radius: 999px; background: var(--tomato); color: white; cursor: pointer; font-weight: 700; }
+.lines { padding: 22px 0; display: grid; gap: 17px; overflow-y: auto; }
+.line { display: flex; align-items: center; gap: 11px; }
+.line > img { width: 58px; height: 58px; flex: 0 0 auto; border-radius: 6px; object-fit: cover; }
+.lineCopy { min-width: 0; display: grid; flex: 1; gap: 4px; }
+.lineCopy strong { overflow: hidden; color: var(--ink); font-family: var(--serif); font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
+.lineCopy span { color: var(--muted); font-size: 12px; }
+.quantity { display: flex; align-items: center; gap: 8px; }
+.quantity button { width: 27px; height: 27px; display: grid; place-items: center; border: 1px solid #e8ddd3; border-radius: 50%; background: white; color: var(--ink); cursor: pointer; }
+.quantity span { min-width: 12px; text-align: center; font-size: 13px; font-weight: 700; }
+.rewards { margin-top: auto; padding: 12px; display: flex; align-items: center; gap: 6px; border-radius: 6px; background: #fbefe4; color: var(--tomato); font-size: 12px; }
+.rewards strong { color: var(--ink); }
+.total { padding: 18px 0; display: flex; justify-content: space-between; border-bottom: 1px solid var(--line); color: var(--ink); }
+.total strong { color: var(--tomato); font-family: var(--serif); font-size: 21px; }
+.checkout { min-height: 49px; margin-top: 16px; display: flex; align-items: center; justify-content: center; gap: 9px; border: 0; border-radius: 6px; background: var(--tomato); color: white; cursor: pointer; font-weight: 800; }
+.checkout:disabled { opacity: .7; cursor: wait; }
+@keyframes riseIn { from { opacity: 0; transform: translate(-50%, 10px); } to { opacity: 1; transform: translate(-50%, 0); } }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slideIn { from { transform: translateX(30px); } to { transform: translateX(0); } }
+@media (max-width: 760px) { .floatingOrder { right: 12px; bottom: 12px; min-height: 48px; gap: 8px; padding: 0 13px; font-size: 12px; } .floatingOrder strong { padding-left: 8px; } .dialog { padding: 22px 17px; } }
+@media (prefers-reduced-motion: reduce) { .toast, .backdrop, .dialog { animation-duration: .01ms; } }
