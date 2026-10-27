@@ -450,9 +450,7 @@ function mercadoPagoConfigurationMessage() {
     return 'MP_ENVIRONMENT debe ser sandbox o production.'
   }
   if (!accessToken) {
-    return MP_ENVIRONMENT === 'sandbox'
-      ? 'Configurá en Backend/.env un Access Token de prueba de Mercado Pago (TEST-...).'
-      : 'Configurá en Backend/.env un Access Token de producción de Mercado Pago.'
+    return 'Los pagos online estarán disponibles próximamente.'
   }
   if (MP_ENVIRONMENT === 'sandbox' && !accessToken.startsWith('TEST-') && mercadoPagoAccountIsTest !== true) {
     return mercadoPagoAccountIsTest === null
