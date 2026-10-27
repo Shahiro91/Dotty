@@ -2077,7 +2077,7 @@ app.post('/api/auth/login', rateLimit('login', 20, 15 * 60_000), async (req, res
     if (!customer || typeof password !== 'string' || !(await bcrypt.compare(password, customer.password_hash))) {
       return res.status(401).json({ error: 'Celular o contraseña incorrectos.' })
     }
-    if (req.body?.portal === 'partner' && customer.role !== 'local_owner') {
+    if (req.body?.portal === 'partner' && !['local_owner', 'admin'].includes(customer.role)) {
       return res.status(403).json({ error: 'Este acceso es solo para cuentas de locales ya creados.' })
     }
     const safeCustomer = publicCustomer(customer, await getBusinessPoints(customer.id, req.body?.businessSlug))
