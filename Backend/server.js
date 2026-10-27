@@ -2177,7 +2177,20 @@ app.post('/api/auth/login', rateLimit('login', 20, 15 * 60_000), async (req, res
     if (req.body?.portal === 'partner' && customer.role === 'customer') {
       const code = typeof req.body?.activationCode === 'string' ? req.body.activationCode.trim() : ''
       if (!/^[A-Z0-9]{4}-?[A-Z0-9]{4}$/i.test(code)) {
-        return res.status(403).json({ error: 'Para activar el acceso del local, ingresá el código que te envió Dotty.' })
+        const { rows: approvedApplications } = await pool.query(
+          `SELECT id FROM local_applications
+           WHERE (($1 <> '' AND lower(email) = $1) OR ($1 = '' AND email IS NULL AND phone = $2))
+             AND status = 'approved' AND claimed_at IS NULL
+           LIMIT 1`,
+          [email, phone],
+        )
+        if (approvedApplications[0]) {
+          return res.status(403).json({
+            error: 'Ingresá el código de activación que te enviamos para continuar.',
+            code: 'activation_required',
+          })
+        }
+        return res.status(403).json({ error: 'Este acceso es solo para cuentas de locales aprobadas.' })
       }
       const client = await pool.connect()
       let transactionStarted = false

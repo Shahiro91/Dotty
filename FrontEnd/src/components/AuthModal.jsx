@@ -21,6 +21,7 @@ function AuthModal({ user, businessSlug, initialMode = 'login', partnerOnly = fa
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [claimCode, setClaimCode] = useState('')
+  const [activationRequired, setActivationRequired] = useState(false)
 
   async function claimBusiness(event) {
     event.preventDefault()
@@ -67,6 +68,11 @@ function AuthModal({ user, businessSlug, initialMode = 'login', partnerOnly = fa
       }
       onAuthenticate(result)
     } catch (submitError) {
+      if (submitError.code === 'activation_required') {
+        setActivationRequired(true)
+        setError('')
+        return
+      }
       setError(submitError.message)
     } finally {
       setIsSubmitting(false)
@@ -103,7 +109,7 @@ function AuthModal({ user, businessSlug, initialMode = 'login', partnerOnly = fa
                 <button className={styles.submitButton} type="button" onClick={onClose}>Entendido</button>
               </div>
             ) : <>
-            <p className={styles.intro}>{partnerOnly ? 'Ingresá con el email y la contraseña del local. El administrador puede usar su celular. Si es tu primer ingreso, también necesitás el código de activación.' : mode === 'login' ? (businessSlug ? 'Ingresá para guardar y consultar tus puntos.' : 'Ingresá a tu cuenta para administrar tu local.') : registrationType === 'local' ? 'Dejanos tus datos, elegí tu email de acceso y una contraseña. Si aprobamos la solicitud, te enviaremos un código para activar tu primer ingreso.' : 'Creá tu cuenta para empezar a sumar puntos.'}</p>
+            <p className={styles.intro}>{partnerOnly ? activationRequired ? 'Ingresá el código de activación que te enviamos para completar el primer ingreso.' : 'Ingresá con el email y la contraseña del local. El administrador puede usar su celular.' : mode === 'login' ? (businessSlug ? 'Ingresá para guardar y consultar tus puntos.' : 'Ingresá a tu cuenta para administrar tu local.') : registrationType === 'local' ? 'Dejanos tus datos, elegí tu email de acceso y una contraseña. Si aprobamos la solicitud, te enviaremos un código para activar tu primer ingreso.' : 'Creá tu cuenta para empezar a sumar puntos.'}</p>
             <form className={styles.form} onSubmit={submit}>
               {mode === 'register' && <>
                 <label htmlFor="account-first-name">Nombre</label>
@@ -112,7 +118,7 @@ function AuthModal({ user, businessSlug, initialMode = 'login', partnerOnly = fa
                 <input className={styles.passwordInput} id="account-last-name" type="text" autoComplete="family-name" maxLength={60} value={lastName} onChange={(event) => setLastName(event.target.value)} required />
               </>}
               <label htmlFor="account-phone">{partnerOnly ? 'Email del local o celular del administrador' : 'Celular'}</label>
-              <div className={styles.inputWrap}>{partnerOnly ? <Mail size={17} /> : <Phone size={17} />}<input id="account-phone" type={partnerOnly ? 'text' : 'tel'} autoComplete={partnerOnly ? 'username' : 'tel'} inputMode={partnerOnly ? 'text' : 'tel'} placeholder={partnerOnly ? 'nombre@local.com' : '+54 9 11 1234 5678'} value={phone} onChange={(event) => setPhone(event.target.value)} required /></div>
+              <div className={styles.inputWrap}>{partnerOnly ? <Mail size={17} /> : <Phone size={17} />}<input id="account-phone" type={partnerOnly ? 'text' : 'tel'} autoComplete={partnerOnly ? 'username' : 'tel'} inputMode={partnerOnly ? 'text' : 'tel'} placeholder={partnerOnly ? 'nombre@local.com' : '+54 9 11 1234 5678'} value={phone} onChange={(event) => { setPhone(event.target.value); setActivationRequired(false); setClaimCode('') }} required /></div>
               {mode === 'register' && registrationType === 'local' && <>
                 <label htmlFor="account-business-name">Nombre del local</label>
                 <input className={styles.passwordInput} id="account-business-name" type="text" autoComplete="organization" maxLength={100} value={businessName} onChange={(event) => setBusinessName(event.target.value)} required />
@@ -142,9 +148,9 @@ function AuthModal({ user, businessSlug, initialMode = 'login', partnerOnly = fa
                   </div>
                 </>}
               </>}
-              {mode === 'login' && partnerOnly && <>
-                <label htmlFor="local-activation-code">Código de activación (si es tu primer ingreso)</label>
-                <input className={styles.passwordInput} id="local-activation-code" type="text" autoComplete="one-time-code" maxLength={9} placeholder="XXXX-XXXX" value={claimCode} onChange={(event) => setClaimCode(event.target.value.toUpperCase())} />
+              {mode === 'login' && partnerOnly && activationRequired && <>
+                <label htmlFor="local-activation-code">Código de activación</label>
+                <input className={styles.passwordInput} id="local-activation-code" type="text" autoComplete="one-time-code" maxLength={9} placeholder="XXXX-XXXX" value={claimCode} onChange={(event) => setClaimCode(event.target.value.toUpperCase())} required />
               </>}
               {error && <p className={styles.error} role="alert">{error}</p>}
               <button className={styles.submitButton} type="submit" disabled={isSubmitting}>
