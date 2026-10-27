@@ -50,7 +50,7 @@ function AdminDashboard({ token, onSignOut }) {
     setError('')
     try {
       const result = await apiRequest(`/admin/local-applications/${application.id}/activation-code`, { method: 'POST', token })
-      setIssuedCode({ code: result.activationCode, businessName: application.businessName, phone: application.phone })
+      setIssuedCode({ code: result.activationCode, businessName: application.businessName, phone: application.phone, email: application.email })
     } catch (requestError) {
       setError(requestError.message)
     } finally {
@@ -97,7 +97,7 @@ function AdminDashboard({ token, onSignOut }) {
       })
       if (status === 'approved' && result.activationCode) {
         const approved = applications.find((application) => application.id === applicationId)
-        setIssuedCode({ code: result.activationCode, businessName: approved?.businessName || '', phone: approved?.phone || '' })
+        setIssuedCode({ code: result.activationCode, businessName: approved?.businessName || '', phone: approved?.phone || '', email: approved?.email || '' })
       }
       setApplications((current) => status === 'approved'
         ? current.filter((application) => application.id !== applicationId)
@@ -151,7 +151,7 @@ function AdminDashboard({ token, onSignOut }) {
           <div className={styles.error} role="status" style={{ background: '#edf5ea', color: '#2f5a2c', borderColor: '#bcd8b8' }}>
             <p><strong>Código de activación para {issuedCode.businessName}:</strong></p>
             <p style={{ fontSize: 22, letterSpacing: '0.12em', fontWeight: 800 }}>{issuedCode.code}</p>
-            <p>Mandáselo por WhatsApp al {issuedCode.phone}. Se muestra una sola vez y vence en 7 días.</p>
+            <p>El dueño ingresará con {issuedCode.email || 'el email registrado'} y su contraseña. Mandale este código por WhatsApp al {issuedCode.phone}. Se muestra una sola vez y vence en 7 días.</p>
             <button type="button" className={styles.approveButton} onClick={() => navigator.clipboard?.writeText(issuedCode.code)}>Copiar</button>{' '}
             <button type="button" className={styles.contactButton} onClick={() => setIssuedCode(null)}>Cerrar</button>
           </div>
@@ -171,6 +171,7 @@ function AdminDashboard({ token, onSignOut }) {
                     <span className={`${styles.plan} ${application.requestedPlan === 'vip' ? styles.planVip : styles.planBasic}`}>{planLabels[application.requestedPlan] || 'Básico'}</span>
                   </div>
                   <p>{application.firstName} {application.lastName}</p>
+                  {application.email && <p>{application.email}</p>}
                   <a className={styles.phone} href={`tel:${application.phone}`}><Phone size={14} /> {application.phone}</a>
                   <time dateTime={application.createdAt}>{new Intl.DateTimeFormat('es-AR', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(application.createdAt))}</time>
                 </div>

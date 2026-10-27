@@ -83,6 +83,7 @@ async function initializeDatabase() {
       first_name VARCHAR(60) NOT NULL DEFAULT '',
       last_name VARCHAR(60) NOT NULL DEFAULT '',
       phone VARCHAR(16) NOT NULL UNIQUE,
+      email VARCHAR(254) UNIQUE,
       password_hash TEXT NOT NULL,
       role VARCHAR(20) NOT NULL DEFAULT 'customer' CHECK (role IN ('customer', 'local_owner', 'admin')),
       business_name VARCHAR(100),
@@ -92,11 +93,13 @@ async function initializeDatabase() {
     );
     ALTER TABLE customers ADD COLUMN IF NOT EXISTS first_name VARCHAR(60) NOT NULL DEFAULT '';
     ALTER TABLE customers ADD COLUMN IF NOT EXISTS last_name VARCHAR(60) NOT NULL DEFAULT '';
+    ALTER TABLE customers ADD COLUMN IF NOT EXISTS email VARCHAR(254);
     ALTER TABLE customers ADD COLUMN IF NOT EXISTS role VARCHAR(20) NOT NULL DEFAULT 'customer' CHECK (role IN ('customer', 'local_owner', 'admin'));
     ALTER TABLE customers ADD COLUMN IF NOT EXISTS business_name VARCHAR(100);
     ALTER TABLE customers ADD COLUMN IF NOT EXISTS business_id BIGINT REFERENCES businesses(id);
     ALTER TABLE customers DROP CONSTRAINT IF EXISTS customers_points_check;
     ALTER TABLE customers ADD COLUMN IF NOT EXISTS referral_code VARCHAR(12);
+    CREATE UNIQUE INDEX IF NOT EXISTS customers_email_unique_idx ON customers (lower(email)) WHERE email IS NOT NULL;
     CREATE UNIQUE INDEX IF NOT EXISTS customers_referral_code_idx ON customers (referral_code) WHERE referral_code IS NOT NULL;
     CREATE TABLE IF NOT EXISTS business_products (
       id BIGSERIAL PRIMARY KEY,
@@ -232,6 +235,7 @@ async function initializeDatabase() {
       first_name VARCHAR(60) NOT NULL,
       last_name VARCHAR(60) NOT NULL,
       phone VARCHAR(16) NOT NULL,
+      email VARCHAR(254),
       business_name VARCHAR(100) NOT NULL,
       requested_plan VARCHAR(20) NOT NULL DEFAULT 'basic' CHECK (requested_plan IN ('basic', 'vip')),
       business_id BIGINT REFERENCES businesses(id),
@@ -239,10 +243,12 @@ async function initializeDatabase() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
     ALTER TABLE local_applications ADD COLUMN IF NOT EXISTS requested_plan VARCHAR(20) NOT NULL DEFAULT 'basic' CHECK (requested_plan IN ('basic', 'vip'));
+    ALTER TABLE local_applications ADD COLUMN IF NOT EXISTS email VARCHAR(254);
     ALTER TABLE local_applications ADD COLUMN IF NOT EXISTS business_id BIGINT REFERENCES businesses(id);
     ALTER TABLE local_applications ADD COLUMN IF NOT EXISTS activation_code_hash VARCHAR(64);
     ALTER TABLE local_applications ADD COLUMN IF NOT EXISTS activation_expires_at TIMESTAMPTZ;
     ALTER TABLE local_applications ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMPTZ;
+    CREATE UNIQUE INDEX IF NOT EXISTS local_applications_email_unique_idx ON local_applications (lower(email)) WHERE email IS NOT NULL AND status IN ('pending', 'contacted', 'approved');
     UPDATE local_applications la SET claimed_at = NOW()
      WHERE status = 'approved' AND claimed_at IS NULL
        AND EXISTS (SELECT 1 FROM customers c WHERE c.business_id = la.business_id AND c.role = 'local_owner');
@@ -349,6 +355,10 @@ function createToken(customer) {
 
 function normalizePhone(value) {
   return typeof value === 'string' ? value.replace(/[\s()-]/g, '') : ''
+}
+
+function normalizeEmail(value) {
+  return typeof value === 'string' ? value.trim().toLowerCase() : ''
 }
 
 const ACTIVATION_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
@@ -833,6 +843,7 @@ app.post('/api/local-applications', rateLimit('application', 10, 60 * 60_000), a
   const firstName = typeof req.body?.firstName === 'string' ? req.body.firstName.trim() : ''
   const lastName = typeof req.body?.lastName === 'string' ? req.body.lastName.trim() : ''
   const phone = normalizePhone(req.body?.phone)
+  const email = normalizeEmail(req.body?.email)
   const password = req.body?.password
   const businessName = typeof req.body?.businessName === 'string' ? req.body.businessName.trim() : ''
   const requestedPlan = req.body?.requestedPlan
@@ -842,6 +853,9 @@ app.post('/api/local-applications', rateLimit('application', 10, 60 * 60_000), a
   }
   if (!/^\+?[0-9]{8,15}$/.test(phone)) {
     return res.status(400).json({ error: 'Ingresá un celular válido con código de país.' })
+  }
+  if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ error: 'Ingresá un email válido para usar como usuario del local.' })
   }
   if (typeof password !== 'string' || password.length < 8 || password.length > 72) {
     return res.status(400).json({ error: 'La contraseña debe tener entre 8 y 72 caracteres.' })
@@ -858,30 +872,34 @@ app.post('/api/local-applications', rateLimit('application', 10, 60 * 60_000), a
   try {
     await client.query('BEGIN')
     transactionStarted = true
-    const { rows: existingCustomers } = await client.query('SELECT id FROM customers WHERE phone = $1', [phone])
+    const { rows: existingCustomers } = await client.query(
+      'SELECT id FROM customers WHERE phone = $1 OR lower(email) = $2',
+      [phone, email],
+    )
     if (existingCustomers[0]) {
       await client.query('ROLLBACK')
       transactionStarted = false
-      return res.status(409).json({ error: 'Ese celular ya tiene una cuenta. Ingresá con esa cuenta para solicitar el alta del local.' })
+      return res.status(409).json({ error: 'Ese celular o email ya tiene una cuenta. Ingresá con esa cuenta para solicitar el alta del local.' })
     }
     const { rows: existingApplications } = await client.query(
-      "SELECT id, status FROM local_applications WHERE phone = $1 AND status IN ('pending', 'contacted', 'approved') ORDER BY created_at DESC LIMIT 1",
-      [phone],
+      "SELECT id, status FROM local_applications WHERE (phone = $1 OR lower(email) = $2) AND status IN ('pending', 'contacted', 'approved') ORDER BY created_at DESC LIMIT 1",
+      [phone, email],
     )
     const passwordHash = await bcrypt.hash(password, 12)
     await client.query(
-      `INSERT INTO customers (first_name, last_name, phone, password_hash, role)
-       VALUES ($1, $2, $3, $4, 'customer')`,
-      [firstName, lastName, phone, passwordHash],
+      `INSERT INTO customers (first_name, last_name, phone, email, password_hash, role)
+       VALUES ($1, $2, $3, $4, $5, 'customer')`,
+      [firstName, lastName, phone, email, passwordHash],
     )
     if (existingApplications[0]) {
+      await client.query('UPDATE local_applications SET email = $1 WHERE id = $2 AND email IS NULL', [email, existingApplications[0].id])
       await client.query('COMMIT')
       transactionStarted = false
       return res.status(200).json({ applicationId: existingApplications[0].id, status: existingApplications[0].status })
     }
     const { rows } = await client.query(
-      'INSERT INTO local_applications (first_name, last_name, phone, business_name, requested_plan) VALUES ($1, $2, $3, $4, $5) RETURNING id, status',
-      [firstName, lastName, phone, businessName, requestedPlan],
+      'INSERT INTO local_applications (first_name, last_name, phone, email, business_name, requested_plan) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, status',
+      [firstName, lastName, phone, email, businessName, requestedPlan],
     )
     await client.query('COMMIT')
     transactionStarted = false
@@ -907,7 +925,7 @@ app.get('/api/admin/local-applications', authenticate, requireAdmin, async (req,
       ? "WHERE status IN ('pending', 'contacted', 'rejected')"
       : 'WHERE ($1::text IS NULL OR status = $1)'
     const { rows } = await pool.query(
-      `SELECT la.id, la.first_name AS "firstName", la.last_name AS "lastName", la.phone,
+      `SELECT la.id, la.first_name AS "firstName", la.last_name AS "lastName", la.phone, la.email,
               business_name AS "businessName", requested_plan AS "requestedPlan",
               la.status, la.created_at AS "createdAt", la.business_id AS "businessId",
               (la.claimed_at IS NOT NULL) AS claimed,
@@ -1047,7 +1065,7 @@ app.patch('/api/admin/local-applications/:id', authenticate, requireAdmin, async
     }
     const updated = await client.query(
       `UPDATE local_applications SET status = $1 WHERE id = $2
-       RETURNING id, first_name AS "firstName", last_name AS "lastName", phone,
+       RETURNING id, first_name AS "firstName", last_name AS "lastName", phone, email,
                  business_name AS "businessName", requested_plan AS "requestedPlan",
                  business_id AS "businessId", status, created_at AS "createdAt"`,
       [nextStatus, applicationId],
@@ -2142,16 +2160,19 @@ app.patch('/api/partner/orders/:id', authenticate, requirePartner, async (req, r
 })
 
 app.post('/api/auth/login', rateLimit('login', 20, 15 * 60_000), async (req, res, next) => {
-  const phone = normalizePhone(req.body?.phone)
+  const identifier = typeof req.body?.identifier === 'string' ? req.body.identifier : ''
+  const email = normalizeEmail(req.body?.email || (identifier.includes('@') ? identifier : ''))
+  const phone = normalizePhone(req.body?.phone || (!email ? identifier : ''))
   const password = req.body?.password
   try {
     const { rows } = await pool.query(
-      'SELECT id, first_name, last_name, phone, password_hash, role, business_name, business_id FROM customers WHERE phone = $1',
-      [phone],
+      `SELECT id, first_name, last_name, phone, email, password_hash, role, business_name, business_id
+       FROM customers WHERE ($1 <> '' AND lower(email) = $1) OR ($2 <> '' AND phone = $2) LIMIT 1`,
+      [email, phone],
     )
     let customer = rows[0]
     if (!customer || typeof password !== 'string' || !(await bcrypt.compare(password, customer.password_hash))) {
-      return res.status(401).json({ error: 'Celular o contraseña incorrectos.' })
+      return res.status(401).json({ error: 'Email, celular o contraseña incorrectos.' })
     }
     if (req.body?.portal === 'partner' && customer.role === 'customer') {
       const code = typeof req.body?.activationCode === 'string' ? req.body.activationCode.trim() : ''
@@ -2165,9 +2186,10 @@ app.post('/api/auth/login', rateLimit('login', 20, 15 * 60_000), async (req, res
         transactionStarted = true
         const { rows: applications } = await client.query(
           `SELECT id, business_id, business_name FROM local_applications
-           WHERE phone = $1 AND activation_code_hash = $2 AND activation_expires_at > NOW()
+           WHERE (($2 <> '' AND lower(email) = $2) OR ($2 = '' AND email IS NULL AND phone = $3))
+             AND activation_code_hash = $1 AND activation_expires_at > NOW()
              AND status = 'approved' AND claimed_at IS NULL FOR UPDATE`,
-          [phone, activationHash(code)],
+          [activationHash(code), email, phone],
         )
         const application = applications[0]
         if (!application) {

@@ -1,4 +1,4 @@
-import { Award, ArrowRight, CheckCircle2, Eye, EyeOff, LoaderCircle, LogOut, Phone, X } from 'lucide-react'
+import { Award, ArrowRight, CheckCircle2, Eye, EyeOff, LoaderCircle, LogOut, Mail, Phone, X } from 'lucide-react'
 import { useState } from 'react'
 import { apiRequest } from '../lib/api.js'
 import styles from './AuthModal.module.css'
@@ -12,6 +12,7 @@ function AuthModal({ user, businessSlug, initialMode = 'login', partnerOnly = fa
   const [businessName, setBusinessName] = useState('')
   const [requestedPlan, setRequestedPlan] = useState('')
   const [phone, setPhone] = useState('')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [passwordConfirmation, setPasswordConfirmation] = useState('')
   const [passwordVisible, setPasswordVisible] = useState(false)
@@ -54,10 +55,10 @@ function AuthModal({ user, businessSlug, initialMode = 'login', partnerOnly = fa
         {
         method: 'POST',
         body: isLocalApplication
-          ? { firstName, lastName, phone, password, businessName, requestedPlan }
+          ? { firstName, lastName, phone, email, password, businessName, requestedPlan }
           : mode === 'register'
             ? { firstName, lastName, phone, password }
-            : { phone, password, businessSlug, ...(partnerOnly ? { portal: 'partner', activationCode: claimCode } : {}) },
+            : { ...(partnerOnly ? { identifier: phone, portal: 'partner', activationCode: claimCode } : { phone }), password, businessSlug },
         },
       )
       if (isLocalApplication) {
@@ -98,11 +99,11 @@ function AuthModal({ user, businessSlug, initialMode = 'login', partnerOnly = fa
             {applicationSent ? (
               <div className={styles.applicationSuccess} role="status">
                 <CheckCircle2 size={30} />
-                <p>Gracias, {firstName}. Revisaremos los datos y nos pondremos en contacto. Ya guardamos tu contraseña; si aprobamos el local, te enviaremos un código para activar tu primer ingreso.</p>
+                <p>Gracias, {firstName}. Registramos {email} como usuario de acceso y guardamos tu contraseña. Revisaremos los datos; si aprobamos el local, te enviaremos un código para activar tu primer ingreso.</p>
                 <button className={styles.submitButton} type="button" onClick={onClose}>Entendido</button>
               </div>
             ) : <>
-            <p className={styles.intro}>{partnerOnly ? 'Ingresá con el celular y la contraseña del local. Si es tu primer ingreso, también necesitás el código de activación.' : mode === 'login' ? (businessSlug ? 'Ingresá para guardar y consultar tus puntos.' : 'Ingresá a tu cuenta para administrar tu local.') : registrationType === 'local' ? 'Dejanos tus datos y elegí una contraseña. Si aprobamos la solicitud, te enviaremos un código para activar tu primer ingreso.' : 'Creá tu cuenta para empezar a sumar puntos.'}</p>
+            <p className={styles.intro}>{partnerOnly ? 'Ingresá con el email y la contraseña del local. El administrador puede usar su celular. Si es tu primer ingreso, también necesitás el código de activación.' : mode === 'login' ? (businessSlug ? 'Ingresá para guardar y consultar tus puntos.' : 'Ingresá a tu cuenta para administrar tu local.') : registrationType === 'local' ? 'Dejanos tus datos, elegí tu email de acceso y una contraseña. Si aprobamos la solicitud, te enviaremos un código para activar tu primer ingreso.' : 'Creá tu cuenta para empezar a sumar puntos.'}</p>
             <form className={styles.form} onSubmit={submit}>
               {mode === 'register' && <>
                 <label htmlFor="account-first-name">Nombre</label>
@@ -110,11 +111,13 @@ function AuthModal({ user, businessSlug, initialMode = 'login', partnerOnly = fa
                 <label htmlFor="account-last-name">Apellido</label>
                 <input className={styles.passwordInput} id="account-last-name" type="text" autoComplete="family-name" maxLength={60} value={lastName} onChange={(event) => setLastName(event.target.value)} required />
               </>}
-              <label htmlFor="account-phone">Celular</label>
-              <div className={styles.inputWrap}><Phone size={17} /><input id="account-phone" type="tel" autoComplete="tel" inputMode="tel" placeholder="+54 9 11 1234 5678" value={phone} onChange={(event) => setPhone(event.target.value)} required /></div>
+              <label htmlFor="account-phone">{partnerOnly ? 'Email del local o celular del administrador' : 'Celular'}</label>
+              <div className={styles.inputWrap}>{partnerOnly ? <Mail size={17} /> : <Phone size={17} />}<input id="account-phone" type={partnerOnly ? 'text' : 'tel'} autoComplete={partnerOnly ? 'username' : 'tel'} inputMode={partnerOnly ? 'text' : 'tel'} placeholder={partnerOnly ? 'nombre@local.com' : '+54 9 11 1234 5678'} value={phone} onChange={(event) => setPhone(event.target.value)} required /></div>
               {mode === 'register' && registrationType === 'local' && <>
                 <label htmlFor="account-business-name">Nombre del local</label>
                 <input className={styles.passwordInput} id="account-business-name" type="text" autoComplete="organization" maxLength={100} value={businessName} onChange={(event) => setBusinessName(event.target.value)} required />
+                <label htmlFor="account-email">Email para ingresar</label>
+                <input className={styles.passwordInput} id="account-email" type="email" autoComplete="email" maxLength={254} placeholder="nombre@local.com" value={email} onChange={(event) => setEmail(event.target.value.trimStart())} required />
                 <span className={styles.planLabel}>Plan solicitado</span>
                 <div className={styles.planOptions} role="group" aria-label="Plan solicitado">
                   <button className={`${styles.planButton} ${requestedPlan === 'basic' ? styles.planSelected : ''}`} type="button" aria-pressed={requestedPlan === 'basic'} onClick={() => setRequestedPlan('basic')}>Básico</button>
