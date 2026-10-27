@@ -24,7 +24,7 @@ const pool = new Pool({
 })
 const menuById = new Map(menuItems.map((item) => [item.id, item]))
 const administratorAccounts = [
-  { phone: '1133113604', password: process.env.ADMIN_PASSWORD_2 },
+  { phone: '1133113604', email: 'mariaquintana520@gmail.com', password: process.env.ADMIN_PASSWORD_2 },
 ]
 const businessFontFamilies = new Set(['original', 'sans', 'serif', 'rounded', 'mono'])
 
@@ -292,14 +292,15 @@ async function initializeDatabase() {
 
     const passwordHash = await bcrypt.hash(administrator.password, 12)
     await pool.query(
-      `INSERT INTO customers (first_name, last_name, phone, password_hash, role)
-       VALUES ('Administrador', 'Dotty', $1, $2, 'admin')
+      `INSERT INTO customers (first_name, last_name, phone, email, password_hash, role)
+       VALUES ('Administrador', 'Dotty', $1, $2, $3, 'admin')
        ON CONFLICT (phone) DO UPDATE SET
          first_name = EXCLUDED.first_name,
          last_name = EXCLUDED.last_name,
+         email = EXCLUDED.email,
          password_hash = EXCLUDED.password_hash,
          role = 'admin'`,
-      [administrator.phone, passwordHash],
+      [administrator.phone, administrator.email, passwordHash],
     )
   }
 }
