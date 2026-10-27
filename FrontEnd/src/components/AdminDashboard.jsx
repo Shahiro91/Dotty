@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Ban, Check, ClipboardList, LoaderCircle, LogOut, Phone, RefreshCw } from 'lucide-react'
+import { Ban, Check, ClipboardList, LoaderCircle, LogOut, Phone, RefreshCw, Trash2 } from 'lucide-react'
 import { apiRequest } from '../lib/api.js'
 import styles from './AdminDashboard.module.css'
 
@@ -65,6 +65,20 @@ function AdminDashboard({ token, onSignOut }) {
     try {
       const result = await apiRequest(`/admin/businesses/${application.businessId}/subscription`, { method: 'POST', token, body: { action } })
       setApplications((current) => current.map((item) => item.id === application.id ? { ...item, billing: result.billing } : item))
+    } catch (requestError) {
+      setError(requestError.message)
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  async function deleteBusiness(application) {
+    if (!window.confirm(`¿Eliminar definitivamente a ${application.businessName}? Se borrarán su tienda, productos y configuración. Los pedidos históricos se conservarán sin asociarse al local. Esta acción no se puede deshacer.`)) return
+    setBusyId(application.id)
+    setError('')
+    try {
+      await apiRequest(`/admin/businesses/${application.businessId}`, { method: 'DELETE', token })
+      setApplications((current) => current.filter((item) => item.id !== application.id))
     } catch (requestError) {
       setError(requestError.message)
     } finally {
@@ -173,6 +187,7 @@ function AdminDashboard({ token, onSignOut }) {
                     </span>
                     <button type="button" className={styles.approveButton} disabled={busyId === application.id} onClick={() => updateSubscription(application, 'extend')}><Check size={15} /> Extender 1 mes</button>
                     {application.billing.status !== 'suspended' && <button type="button" className={styles.rejectButton} aria-label={`Suspender ${application.businessName}`} title="Suspender ahora" disabled={busyId === application.id} onClick={() => updateSubscription(application, 'suspend')}><Ban size={16} /></button>}
+                    <button type="button" className={styles.rejectButton} aria-label={`Eliminar ${application.businessName}`} title="Eliminar local definitivamente" disabled={busyId === application.id} onClick={() => deleteBusiness(application)}><Trash2 size={16} /></button>
                   </div>
                 )}
                 {['pending', 'contacted'].includes(application.status) && (
@@ -187,7 +202,7 @@ function AdminDashboard({ token, onSignOut }) {
             ))}
           </div>
         )}
-        <p className={styles.note}>{section === 'active' ? 'El plan mostrado es el que el local solicitó al registrarse.' : 'Al aprobar, el solicitante podrá crear su cuenta de local con este mismo celular.'}</p>
+        <p className={styles.note}>{section === 'active' ? 'El plan mostrado es el que el local solicitó al registrarse.' : 'Al aprobar, enviá el código de activación. El local ingresará con el celular y la contraseña que eligió al registrarse.'}</p>
       </section>
     </main>
   )

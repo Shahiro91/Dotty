@@ -833,6 +833,7 @@ app.post('/api/local-applications', rateLimit('application', 10, 60 * 60_000), a
   const firstName = typeof req.body?.firstName === 'string' ? req.body.firstName.trim() : ''
   const lastName = typeof req.body?.lastName === 'string' ? req.body.lastName.trim() : ''
   const phone = normalizePhone(req.body?.phone)
+  const password = req.body?.password
   const businessName = typeof req.body?.businessName === 'string' ? req.body.businessName.trim() : ''
   const requestedPlan = req.body?.requestedPlan
 
@@ -842,6 +843,9 @@ app.post('/api/local-applications', rateLimit('application', 10, 60 * 60_000), a
   if (!/^\+?[0-9]{8,15}$/.test(phone)) {
     return res.status(400).json({ error: 'Ingresá un celular válido con código de país.' })
   }
+  if (typeof password !== 'string' || password.length < 8 || password.length > 72) {
+    return res.status(400).json({ error: 'La contraseña debe tener entre 8 y 72 caracteres.' })
+  }
   if (businessName.length < 2 || businessName.length > 100) {
     return res.status(400).json({ error: 'Ingresá el nombre del local (entre 2 y 100 caracteres).' })
   }
@@ -849,14 +853,44 @@ app.post('/api/local-applications', rateLimit('application', 10, 60 * 60_000), a
     return res.status(400).json({ error: 'Elegí el plan Básico o VIP.' })
   }
 
+  const client = await pool.connect()
+  let transactionStarted = false
   try {
-    const { rows } = await pool.query(
+    await client.query('BEGIN')
+    transactionStarted = true
+    const { rows: existingCustomers } = await client.query('SELECT id FROM customers WHERE phone = $1', [phone])
+    if (existingCustomers[0]) {
+      await client.query('ROLLBACK')
+      transactionStarted = false
+      return res.status(409).json({ error: 'Ese celular ya tiene una cuenta. Ingresá con esa cuenta para solicitar el alta del local.' })
+    }
+    const { rows: existingApplications } = await client.query(
+      "SELECT id FROM local_applications WHERE phone = $1 AND status IN ('pending', 'contacted', 'approved')",
+      [phone],
+    )
+    if (existingApplications[0]) {
+      await client.query('ROLLBACK')
+      transactionStarted = false
+      return res.status(409).json({ error: 'Ya existe una solicitud o un local asociado a ese celular.' })
+    }
+    const passwordHash = await bcrypt.hash(password, 12)
+    await client.query(
+      `INSERT INTO customers (first_name, last_name, phone, password_hash, role)
+       VALUES ($1, $2, $3, $4, 'customer')`,
+      [firstName, lastName, phone, passwordHash],
+    )
+    const { rows } = await client.query(
       'INSERT INTO local_applications (first_name, last_name, phone, business_name, requested_plan) VALUES ($1, $2, $3, $4, $5) RETURNING id, status',
       [firstName, lastName, phone, businessName, requestedPlan],
     )
+    await client.query('COMMIT')
+    transactionStarted = false
     res.status(201).json({ applicationId: rows[0].id, status: rows[0].status })
   } catch (error) {
+    if (transactionStarted) await client.query('ROLLBACK')
     next(error)
+  } finally {
+    client.release()
   }
 })
 
@@ -915,6 +949,47 @@ app.post('/api/admin/businesses/:id/subscription', authenticate, requireAdmin, a
     res.json({ billing: describeBilling(rows[0]) })
   } catch (error) {
     next(error)
+  }
+})
+
+app.delete('/api/admin/businesses/:id', authenticate, requireAdmin, async (req, res, next) => {
+  const businessId = Number(req.params.id)
+  if (!Number.isSafeInteger(businessId) || businessId < 1) {
+    return res.status(400).json({ error: 'El local no es válido.' })
+  }
+  const client = await pool.connect()
+  let transactionStarted = false
+  try {
+    await client.query('BEGIN')
+    transactionStarted = true
+    const { rows: businesses } = await client.query('SELECT id FROM businesses WHERE id = $1 FOR UPDATE', [businessId])
+    if (!businesses[0]) {
+      await client.query('ROLLBACK')
+      transactionStarted = false
+      return res.status(404).json({ error: 'No encontramos el local.' })
+    }
+    await client.query(
+      `UPDATE customer_orders SET business_id = NULL, discount_redemption_id = NULL, product_reward_redemption_id = NULL
+       WHERE business_id = $1 OR discount_redemption_id IN (SELECT id FROM business_redemptions WHERE business_id = $1)
+          OR product_reward_redemption_id IN (SELECT id FROM business_redemptions WHERE business_id = $1)`,
+      [businessId],
+    )
+    await client.query('DELETE FROM business_redemptions WHERE business_id = $1', [businessId])
+    await client.query(
+      `UPDATE customers SET role = 'customer', business_id = NULL, business_name = NULL
+       WHERE business_id = $1 AND role = 'local_owner'`,
+      [businessId],
+    )
+    await client.query('DELETE FROM local_applications WHERE business_id = $1', [businessId])
+    await client.query('DELETE FROM businesses WHERE id = $1', [businessId])
+    await client.query('COMMIT')
+    transactionStarted = false
+    res.json({ deleted: true })
+  } catch (error) {
+    if (transactionStarted) await client.query('ROLLBACK')
+    next(error)
+  } finally {
+    client.release()
   }
 })
 
@@ -2073,11 +2148,57 @@ app.post('/api/auth/login', rateLimit('login', 20, 15 * 60_000), async (req, res
       'SELECT id, first_name, last_name, phone, password_hash, role, business_name, business_id FROM customers WHERE phone = $1',
       [phone],
     )
-    const customer = rows[0]
+    let customer = rows[0]
     if (!customer || typeof password !== 'string' || !(await bcrypt.compare(password, customer.password_hash))) {
       return res.status(401).json({ error: 'Celular o contraseña incorrectos.' })
     }
-    if (req.body?.portal === 'partner' && !['local_owner', 'admin'].includes(customer.role)) {
+    if (req.body?.portal === 'partner' && customer.role === 'customer') {
+      const code = typeof req.body?.activationCode === 'string' ? req.body.activationCode.trim() : ''
+      if (!/^[A-Z0-9]{4}-?[A-Z0-9]{4}$/i.test(code)) {
+        return res.status(403).json({ error: 'Para activar el acceso del local, ingresá el código que te envió Dotty.' })
+      }
+      const client = await pool.connect()
+      let transactionStarted = false
+      try {
+        await client.query('BEGIN')
+        transactionStarted = true
+        const { rows: applications } = await client.query(
+          `SELECT id, business_id, business_name FROM local_applications
+           WHERE phone = $1 AND activation_code_hash = $2 AND activation_expires_at > NOW()
+             AND status = 'approved' AND claimed_at IS NULL FOR UPDATE`,
+          [phone, activationHash(code)],
+        )
+        const application = applications[0]
+        if (!application) {
+          await client.query('ROLLBACK')
+          transactionStarted = false
+          return res.status(400).json({ error: 'El código es incorrecto o venció. Pedí uno nuevo al administrador.' })
+        }
+        const { rows: claimedCustomers } = await client.query(
+          `UPDATE customers SET role = 'local_owner', business_name = $1, business_id = $2
+           WHERE id = $3 AND role = 'customer'
+           RETURNING id, first_name, last_name, phone, password_hash, role, business_name, business_id`,
+          [application.business_name, application.business_id, customer.id],
+        )
+        if (!claimedCustomers[0]) {
+          await client.query('ROLLBACK')
+          transactionStarted = false
+          return res.status(403).json({ error: 'Esta cuenta no puede activar un local.' })
+        }
+        customer = claimedCustomers[0]
+        await client.query(
+          'UPDATE local_applications SET activation_code_hash = NULL, activation_expires_at = NULL, claimed_at = NOW() WHERE id = $1',
+          [application.id],
+        )
+        await client.query('COMMIT')
+        transactionStarted = false
+      } catch (error) {
+        if (transactionStarted) await client.query('ROLLBACK')
+        throw error
+      } finally {
+        client.release()
+      }
+    } else if (req.body?.portal === 'partner' && !['local_owner', 'admin'].includes(customer.role)) {
       return res.status(403).json({ error: 'Este acceso es solo para cuentas de locales ya creados.' })
     }
     const safeCustomer = publicCustomer(customer, await getBusinessPoints(customer.id, req.body?.businessSlug))

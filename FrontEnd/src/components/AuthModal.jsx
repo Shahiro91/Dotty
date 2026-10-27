@@ -39,7 +39,7 @@ function AuthModal({ user, businessSlug, initialMode = 'login', partnerOnly = fa
     event.preventDefault()
     setError('')
     const isLocalApplication = mode === 'register' && registrationType === 'local'
-    if (mode === 'register' && registrationType === 'customer' && password !== passwordConfirmation) {
+    if (mode === 'register' && password !== passwordConfirmation) {
       setError('Las contraseñas no coinciden.')
       return
     }
@@ -54,10 +54,10 @@ function AuthModal({ user, businessSlug, initialMode = 'login', partnerOnly = fa
         {
         method: 'POST',
         body: isLocalApplication
-          ? { firstName, lastName, phone, businessName, requestedPlan }
+          ? { firstName, lastName, phone, password, businessName, requestedPlan }
           : mode === 'register'
             ? { firstName, lastName, phone, password }
-            : { phone, password, businessSlug, ...(partnerOnly ? { portal: 'partner' } : {}) },
+            : { phone, password, businessSlug, ...(partnerOnly ? { portal: 'partner', activationCode: claimCode } : {}) },
         },
       )
       if (isLocalApplication) {
@@ -98,11 +98,11 @@ function AuthModal({ user, businessSlug, initialMode = 'login', partnerOnly = fa
             {applicationSent ? (
               <div className={styles.applicationSuccess} role="status">
                 <CheckCircle2 size={30} />
-                <p>Gracias, {firstName}. Revisaremos los datos y nos pondremos en contacto antes de dar de alta tu local. Esta solicitud todavía no crea una cuenta.</p>
+                <p>Gracias, {firstName}. Revisaremos los datos y nos pondremos en contacto. Ya guardamos tu contraseña; si aprobamos el local, te enviaremos un código para activar tu primer ingreso.</p>
                 <button className={styles.submitButton} type="button" onClick={onClose}>Entendido</button>
               </div>
             ) : <>
-            <p className={styles.intro}>{partnerOnly ? 'Ingresá con el celular y la contraseña de un local ya creado.' : mode === 'login' ? (businessSlug ? 'Ingresá para guardar y consultar tus puntos.' : 'Ingresá a tu cuenta para administrar tu local.') : registrationType === 'local' ? 'Dejanos tus datos. Nos contactaremos para conversar antes de crear una cuenta.' : 'Creá tu cuenta para empezar a sumar puntos.'}</p>
+            <p className={styles.intro}>{partnerOnly ? 'Ingresá con el celular y la contraseña del local. Si es tu primer ingreso, también necesitás el código de activación.' : mode === 'login' ? (businessSlug ? 'Ingresá para guardar y consultar tus puntos.' : 'Ingresá a tu cuenta para administrar tu local.') : registrationType === 'local' ? 'Dejanos tus datos y elegí una contraseña. Si aprobamos la solicitud, te enviaremos un código para activar tu primer ingreso.' : 'Creá tu cuenta para empezar a sumar puntos.'}</p>
             <form className={styles.form} onSubmit={submit}>
               {mode === 'register' && <>
                 <label htmlFor="account-first-name">Nombre</label>
@@ -121,7 +121,7 @@ function AuthModal({ user, businessSlug, initialMode = 'login', partnerOnly = fa
                   <button className={`${styles.planButton} ${requestedPlan === 'vip' ? styles.planSelected : ''}`} type="button" aria-pressed={requestedPlan === 'vip'} onClick={() => setRequestedPlan('vip')}>VIP</button>
                 </div>
               </>}
-              {(mode === 'login' || registrationType === 'customer') && <>
+              {(mode === 'login' || mode === 'register') && <>
                 <label htmlFor="account-password">Contraseña</label>
                 <div className={styles.passwordField}>
                   <input className={styles.passwordInput} id="account-password" type={passwordVisible ? 'text' : 'password'} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} minLength={8} maxLength={72} placeholder="Mínimo 8 caracteres" value={password} onChange={(event) => setPassword(event.target.value)} required />
@@ -138,6 +138,10 @@ function AuthModal({ user, businessSlug, initialMode = 'login', partnerOnly = fa
                     </button>
                   </div>
                 </>}
+              </>}
+              {mode === 'login' && partnerOnly && <>
+                <label htmlFor="local-activation-code">Código de activación (si es tu primer ingreso)</label>
+                <input className={styles.passwordInput} id="local-activation-code" type="text" autoComplete="one-time-code" maxLength={9} placeholder="XXXX-XXXX" value={claimCode} onChange={(event) => setClaimCode(event.target.value.toUpperCase())} />
               </>}
               {error && <p className={styles.error} role="alert">{error}</p>}
               <button className={styles.submitButton} type="submit" disabled={isSubmitting}>
