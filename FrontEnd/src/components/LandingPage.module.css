@@ -117,7 +117,8 @@
 @media (max-width: 640px) {
   .header { height: 60px; padding: 0 14px; }
   .brand { font-size: 18px; }
-  .ghostButton { display: none; }
+  .ghostButton { min-height: 36px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid #e4d5ca; background: white; color: var(--tomato-dark); }
+  .headerCta { display: none; }
   .hero, .section, .cta { width: calc(100% - 32px); }
   .hero h1 { font-size: 38px; }
   .heroCopy p { font-size: 16px; }
