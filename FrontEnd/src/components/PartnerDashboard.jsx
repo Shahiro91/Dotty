@@ -1044,7 +1044,7 @@ function BillingPanel({ token, billing, isSuspended, onError }) {
   const daysToDue = Math.ceil((new Date(billing.dueAt) - Date.now()) / 86_400_000)
   const statusText = billing.status === 'suspended'
     ? 'Cuenta suspendida'
-    : billing.status === 'grace' ? 'Vencida, en período de gracia' : 'Al día'
+    : billing.status === 'grace' ? 'Vencida, con plazo para pagar' : 'Al día'
 
   async function pay() {
     setIsPaying(true)

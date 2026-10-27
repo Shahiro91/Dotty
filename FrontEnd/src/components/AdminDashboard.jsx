@@ -184,7 +184,7 @@ function AdminDashboard({ token, onSignOut }) {
                 {section === 'active' && application.billing && (
                   <div className={styles.actions}>
                     <span className={`${styles.status} ${application.billing.status === 'active' ? styles.status_approved : application.billing.status === 'grace' ? styles.status_contacted : styles.status_rejected}`}>
-                      {application.billing.status === 'active' ? 'Al día' : application.billing.status === 'grace' ? 'En gracia' : 'Suspendido'} · vence {new Intl.DateTimeFormat('es-AR', { dateStyle: 'medium' }).format(new Date(application.billing.dueAt))}
+                      {application.billing.status === 'active' ? 'Al día' : application.billing.status === 'grace' ? 'Con plazo para pagar' : 'Suspendido'} · vence {new Intl.DateTimeFormat('es-AR', { dateStyle: 'medium' }).format(new Date(application.billing.dueAt))}
                     </span>
                     <button type="button" className={styles.approveButton} disabled={busyId === application.id} onClick={() => updateSubscription(application, 'extend')}><Check size={15} /> Extender 1 mes</button>
                     {application.billing.status !== 'suspended' && <button type="button" className={styles.rejectButton} aria-label={`Suspender ${application.businessName}`} title="Suspender ahora" disabled={busyId === application.id} onClick={() => updateSubscription(application, 'suspend')}><Ban size={16} /></button>}
