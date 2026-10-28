@@ -496,8 +496,13 @@ async function loadBilling(businessId) {
      FROM subscription_payments WHERE business_id = $1 ORDER BY paid_at DESC LIMIT 12`,
     [businessId],
   )
+  const requiresInitialPayment = payments.length === 0
+  const details = describeBilling(rows[0])
   return {
-    ...describeBilling(rows[0]),
+    ...details,
+    requiresInitialPayment,
+    status: requiresInitialPayment ? 'payment_required' : details.status,
+    canPay: requiresInitialPayment || details.canPay,
     payments,
     paymentsConfigured: !mercadoPagoConfigurationMessage(),
     paymentConfigurationMessage: mercadoPagoConfigurationMessage(),
@@ -565,7 +570,8 @@ function partnerGuard({ allowSuspended }) {
   return async function guard(req, res, next) {
     try {
       const { rows } = await pool.query(
-        `SELECT c.role, c.business_id, b.plan, b.subscription_due_at AS "subscriptionDueAt"
+        `SELECT c.role, c.business_id, b.plan, b.subscription_due_at AS "subscriptionDueAt",
+                EXISTS (SELECT 1 FROM subscription_payments sp WHERE sp.business_id = b.id) AS "hasPaidSubscription"
          FROM customers c LEFT JOIN businesses b ON b.id = c.business_id WHERE c.id = $1`,
         [req.customerId],
       )
@@ -573,6 +579,9 @@ function partnerGuard({ allowSuspended }) {
         return res.status(403).json({ error: 'Tu cuenta no tiene un local activo asociado.' })
       }
       req.businessId = rows[0].business_id
+      if (!allowSuspended && !rows[0].hasPaidSubscription) {
+        return res.status(403).json({ error: 'Para comenzar a usar el panel, primero aboná tu suscripción.', code: 'initial_payment_required' })
+      }
       if (!allowSuspended && describeBilling(rows[0]).status === 'suspended') {
         return res.status(403).json({ error: SUSPENDED_MESSAGE, code: 'subscription_suspended' })
       }

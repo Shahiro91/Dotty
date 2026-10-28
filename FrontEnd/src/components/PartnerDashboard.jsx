@@ -116,7 +116,7 @@ function PartnerDashboard({ token, user, onSignOut }) {
         if (!isCurrent) return
         setBusiness(overviewResult.business)
         setBilling(overviewResult.billing)
-        if (overviewResult.billing.status === 'suspended') {
+        if (overviewResult.billing.status === 'suspended' || overviewResult.billing.requiresInitialPayment) {
           setSection('billing')
           return
         }
@@ -152,6 +152,10 @@ function PartnerDashboard({ token, user, onSignOut }) {
     apiRequest('/partner/billing/confirm', { method: 'POST', token, body: { paymentId } })
       .then((result) => {
         setBilling(result.billing)
+        if (!result.billing.requiresInitialPayment) {
+          window.location.reload()
+          return
+        }
         flash(result.applied ? '¡Pago recibido! Tu suscripción fue renovada.' : result.paymentStatus === 'approved' ? 'Este pago ya estaba registrado.' : 'Todavía no vemos el pago aprobado. Si ya pagaste, se va a acreditar en unos minutos.')
       })
       .catch((confirmError) => setError(confirmError.message))
@@ -159,13 +163,14 @@ function PartnerDashboard({ token, user, onSignOut }) {
   }, [token])
 
   useEffect(() => {
+    if (isLoading || billing?.requiresInitialPayment) return
     let isCurrent = true
     apiRequest('/partner/stats', { token })
       .then((result) => { if (isCurrent) { setStatistics(result); setStatisticsError('') } })
       .catch((requestError) => { if (isCurrent) setStatisticsError(requestError.message) })
       .finally(() => { if (isCurrent) setStatisticsLoading(false) })
     return () => { isCurrent = false }
-  }, [token])
+  }, [token, isLoading, billing?.requiresInitialPayment])
 
   async function refreshStatistics() {
     setStatisticsLoading(true)
@@ -560,7 +565,8 @@ function PartnerDashboard({ token, user, onSignOut }) {
   const isPastGracePeriod = billing && currentTime > new Date(billing.graceEndsAt).getTime()
   const isInGracePeriod = billing && currentTime > new Date(billing.dueAt).getTime() && !isPastGracePeriod
   const isSuspended = billing?.status === 'suspended' || isPastGracePeriod
-  const visibleSections = isSuspended ? sections.filter((item) => item.id === 'billing') : sections
+  const isPaymentRequired = billing?.requiresInitialPayment === true
+  const visibleSections = isSuspended || isPaymentRequired ? sections.filter((item) => item.id === 'billing') : sections
   const daysToDue = billing ? calendarDaysBetween(new Date(currentTime), new Date(billing.dueAt)) : null
   const billingAlert = !billing || isSuspended ? '' : billing.status === 'grace'
     ? `Tu suscripción venció. Tenés hasta el ${formatLongDate(billing.graceEndsAt)} para pagar; después tu cuenta se suspende.`
@@ -1042,7 +1048,7 @@ function BillingPanel({ token, billing, isSuspended, onError }) {
   const [isPaying, setIsPaying] = useState(false)
   if (!billing) return <p className={styles.columnEmpty}>Cargando tu suscripción...</p>
   const daysToDue = Math.ceil((new Date(billing.dueAt) - Date.now()) / 86_400_000)
-  const statusText = billing.status === 'suspended'
+  const statusText = billing.requiresInitialPayment ? 'Pago inicial pendiente' : billing.status === 'suspended'
     ? 'Cuenta suspendida'
     : billing.status === 'grace' ? 'Vencida, con plazo para pagar' : 'Al día'
 
@@ -1063,17 +1069,18 @@ function BillingPanel({ token, billing, isSuspended, onError }) {
     <div className={styles.billingCard}>
       <div className={styles.billingHead}>
         <span className={styles.planPill}>Plan {billing.planLabel}</span>
-        <em className={`${styles.billingStatus} ${styles[`billing_${billing.status}`]}`}>{statusText}</em>
+        <em className={`${styles.billingStatus} ${styles[`billing_${billing.status === 'payment_required' ? 'suspended' : billing.status}`]}`}>{statusText}</em>
       </div>
       <dl className={styles.billingFacts}>
         <div><dt>Importe mensual</dt><dd>{currency.format(billing.price)}</dd></div>
-        <div><dt>{billing.status === 'active' ? 'Próximo vencimiento' : 'Venció el'}</dt><dd>{formatLongDate(billing.dueAt)}</dd></div>
+        {!billing.requiresInitialPayment && <div><dt>{billing.status === 'active' ? 'Próximo vencimiento' : 'Venció el'}</dt><dd>{formatLongDate(billing.dueAt)}</dd></div>}
         {billing.status === 'active' && <div><dt>Faltan</dt><dd>{daysToDue <= 0 ? 'Vence hoy' : `${daysToDue} día${daysToDue === 1 ? '' : 's'}`}</dd></div>}
         {billing.status === 'grace' && <div><dt>Pagá hasta el</dt><dd>{formatLongDate(billing.graceEndsAt)}</dd></div>}
       </dl>
       <button type="button" className={styles.payButton} disabled={isPaying || !billing.canPay || !billing.paymentsConfigured} onClick={pay}>
         {isPaying ? <LoaderCircle size={16} className={styles.spinner} /> : <CreditCard size={16} />} Pagar {currency.format(billing.price)} con Mercado Pago
       </button>
+      {billing.requiresInitialPayment && <p className={styles.billingHint}>Aboná el primer mes para desbloquear el resto del panel.</p>}
       {!billing.paymentsConfigured && <p className={styles.billingHint}>{billing.paymentConfigurationMessage || 'El pago online todavía no está habilitado. Contactá a Dotty.'}</p>}
       {billing.paymentsConfigured && !billing.canPay && <p className={styles.billingHint}>El botón de pago se habilita 10 días antes del vencimiento.</p>}
       <p className={styles.billingHint}>Si no pagás dentro de los 5 días posteriores al vencimiento, la cuenta se suspende. No se elimina ningún dato.</p>
