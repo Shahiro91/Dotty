@@ -53,7 +53,7 @@ async function initializeDatabase() {
       secondary_color VARCHAR(7) NOT NULL DEFAULT '#58705e',
       font_family VARCHAR(20) NOT NULL DEFAULT 'original',
       address VARCHAR(200) NOT NULL DEFAULT '',
-      opening_hours VARCHAR(160) NOT NULL DEFAULT '',
+      opening_hours TEXT NOT NULL DEFAULT '',
       whatsapp VARCHAR(20) NOT NULL DEFAULT '',
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
@@ -69,6 +69,7 @@ async function initializeDatabase() {
     ALTER TABLE businesses ADD COLUMN IF NOT EXISTS addons_enabled BOOLEAN NOT NULL DEFAULT TRUE;
     ALTER TABLE businesses ADD COLUMN IF NOT EXISTS orders_shift_started_at TIMESTAMPTZ;
     ALTER TABLE businesses ADD COLUMN IF NOT EXISTS subscription_due_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '1 month');
+    ALTER TABLE businesses ALTER COLUMN opening_hours TYPE TEXT;
     CREATE TABLE IF NOT EXISTS subscription_payments (
       id BIGSERIAL PRIMARY KEY,
       business_id BIGINT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
@@ -1341,7 +1342,7 @@ app.patch('/api/partner/business', authenticate, requirePartner, async (req, res
   const deliveryEnabled = req.body?.deliveryEnabled !== false
   const addonsEnabled = req.body?.addonsEnabled !== false
   if (!name || name.length > 100 || description.length > 1000 || address.length > 200
-    || openingHours.length > 160 || whatsapp.length > 20 || !isValidImageDataUrl(logoDataUrl)
+    || openingHours.length > 1000 || whatsapp.length > 20 || !isValidImageDataUrl(logoDataUrl)
     || !isValidImageDataUrl(bannerDataUrl) || !bannerDataUrl
     || !isValidHexColor(primaryColor) || !isValidHexColor(secondaryColor)
     || !Number.isFinite(logoScale) || logoScale < 1 || logoScale > 3

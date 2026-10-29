@@ -41,6 +41,62 @@ const orderStatuses = [
 
 const emptyProduct = { name: '', description: '', category: '', price: '', pointsPerUnit: '0', imageDataUrl: '', imageScale: 1, imagePositionX: 50, imagePositionY: 50 }
 const emptyReward = { name: '', description: '', imageDataUrl: '', rewardType: 'product', discountType: 'fixed', discountValue: '', pointsCost: '' }
+const openingDayLabels = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
+const openingDayNames = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
+
+function createEmptyOpeningSchedule() {
+  return openingDayLabels.map((day) => ({ day, isOpen: false, firstStart: '', firstEnd: '', hasSecondShift: false, secondStart: '', secondEnd: '' }))
+}
+
+function parseOpeningSchedule(value) {
+  if (!value) return createEmptyOpeningSchedule()
+  const entries = value.split(' · ')
+  if (entries.length !== openingDayLabels.length) return null
+  const schedule = []
+  for (const day of openingDayLabels) {
+    const entry = entries.find((item) => item.startsWith(`${day}: `))
+    if (!entry) return null
+    const hours = entry.slice(day.length + 2)
+    if (hours.toLowerCase() === 'cerrado') {
+      schedule.push({ day, isOpen: false, firstStart: '', firstEnd: '', hasSecondShift: false, secondStart: '', secondEnd: '' })
+      continue
+    }
+    const ranges = [...hours.matchAll(/(\d{2}:\d{2})–(\d{2}:\d{2})/g)]
+    if (ranges.length < 1 || ranges.length > 2) return null
+    schedule.push({
+      day,
+      isOpen: true,
+      firstStart: ranges[0][1],
+      firstEnd: ranges[0][2],
+      hasSecondShift: ranges.length === 2,
+      secondStart: ranges[1]?.[1] || '',
+      secondEnd: ranges[1]?.[2] || '',
+    })
+  }
+  return schedule
+}
+
+function serializeOpeningSchedule(schedule) {
+  if (!schedule.some((day) => day.isOpen)) return ''
+  return schedule.filter((day) => day.isOpen).map((day) => {
+    const shifts = [`${day.firstStart}–${day.firstEnd}`]
+    if (day.hasSecondShift) shifts.push(`${day.secondStart}–${day.secondEnd}`)
+    return `${day.day}: ${shifts.join(' y ')}`
+  }).concat(schedule.filter((day) => !day.isOpen).map((day) => `${day.day}: Cerrado`))
+    .sort((left, right) => openingDayLabels.indexOf(left.slice(0, left.indexOf(':'))) - openingDayLabels.indexOf(right.slice(0, right.indexOf(':'))))
+    .join(' · ')
+}
+
+function openingScheduleError(schedule) {
+  for (const day of schedule) {
+    if (!day.isOpen) continue
+    if (!day.firstStart || !day.firstEnd || day.firstStart >= day.firstEnd) return `Completá correctamente el primer turno del ${day.day}.`
+    if (day.hasSecondShift && (!day.secondStart || !day.secondEnd || day.secondStart >= day.secondEnd || day.secondStart < day.firstEnd)) {
+      return `Revisá el segundo turno del ${day.day}: debe empezar después del primero.`
+    }
+  }
+  return ''
+}
 
 function cropProductImage(imageDataUrl, imageScale, imagePositionX, imagePositionY) {
   return new Promise((resolve, reject) => {
@@ -72,6 +128,7 @@ function PartnerDashboard({ token, user, onSignOut }) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [section, setSection] = useState(() => window.matchMedia('(max-width: 900px)').matches ? 'store' : 'orders')
   const [business, setBusiness] = useState(null)
+  const [openingHoursSchedule, setOpeningHoursSchedule] = useState(null)
   const [categories, setCategories] = useState([])
   const [categoryAddons, setCategoryAddons] = useState([])
   const [addonDraft, setAddonDraft] = useState({ name: '', price: '' })
@@ -131,6 +188,7 @@ function PartnerDashboard({ token, user, onSignOut }) {
       .then(async (overviewResult) => {
         if (!isCurrent) return
         setBusiness(overviewResult.business)
+        setOpeningHoursSchedule(parseOpeningSchedule(overviewResult.business.openingHours))
         setBilling(overviewResult.billing)
         if (overviewResult.billing.status === 'suspended' || overviewResult.billing.requiresInitialPayment) {
           setSection('billing')
@@ -224,6 +282,13 @@ function PartnerDashboard({ token, user, onSignOut }) {
   const cropShiftY = (50 - (productDraft.imagePositionY ?? 50)) * productDraft.imageScale * (1 - cropWindowHeight)
   async function saveBusiness(event) {
     event.preventDefault()
+    if (openingHoursSchedule) {
+      const scheduleError = openingScheduleError(openingHoursSchedule)
+      if (scheduleError) {
+        setError(scheduleError)
+        return
+      }
+    }
     setIsSaving(true)
     setError('')
     try {
@@ -233,7 +298,7 @@ function PartnerDashboard({ token, user, onSignOut }) {
           name: business.name,
           description: business.description,
           address: business.address,
-          openingHours: business.openingHours,
+          openingHours: openingHoursSchedule ? serializeOpeningSchedule(openingHoursSchedule) : business.openingHours,
           whatsapp: business.whatsapp,
           logoDataUrl: business.logoDataUrl,
           logoScale: business.logoScale,
@@ -246,6 +311,7 @@ function PartnerDashboard({ token, user, onSignOut }) {
         },
       })
       setBusiness(result.business)
+      setOpeningHoursSchedule(parseOpeningSchedule(result.business.openingHours))
       flash('Perfil del local actualizado.')
     } catch (saveError) { setError(saveError.message) } finally { setIsSaving(false) }
   }
@@ -662,10 +728,9 @@ function PartnerDashboard({ token, user, onSignOut }) {
             <textarea className={styles.textArea} id="business-description" maxLength={1000} rows={3} value={business.description} onChange={(event) => updateBusiness('description', event.target.value)} />
             <label className={styles.fieldLabel} htmlFor="business-address">Dirección</label>
             <input className={styles.textInput} id="business-address" maxLength={200} value={business.address} onChange={(event) => updateBusiness('address', event.target.value)} />
-            <div className={styles.twoFields}>
-              <div><label className={styles.fieldLabel} htmlFor="business-hours">Horarios</label><input className={styles.textInput} id="business-hours" maxLength={160} value={business.openingHours} onChange={(event) => updateBusiness('openingHours', event.target.value)} /></div>
-              <div><label className={styles.fieldLabel} htmlFor="business-whatsapp">WhatsApp</label><input className={styles.textInput} id="business-whatsapp" type="tel" maxLength={20} value={business.whatsapp} onChange={(event) => updateBusiness('whatsapp', event.target.value)} /></div>
-            </div>
+            <OpeningHoursEditor value={business.openingHours} schedule={openingHoursSchedule} onChange={setOpeningHoursSchedule} />
+            <label className={styles.fieldLabel} htmlFor="business-whatsapp">WhatsApp</label>
+            <input className={styles.textInput} id="business-whatsapp" type="tel" maxLength={20} value={business.whatsapp} onChange={(event) => updateBusiness('whatsapp', event.target.value)} />
           </section>
           <section className={styles.formSection}>
             <div className={styles.sectionHeading}><h2>Portada y colores</h2><p>El banner encabeza tu web; el primario marca títulos y botones, el secundario resalta puntos y detalles.</p></div>
@@ -1065,6 +1130,48 @@ function ShareLink({ slug }) {
       <button type="button" className={styles.copyButton} onClick={copy}>{copied ? <Check size={16} /> : <Copy size={16} />} {copied ? '¡Copiado!' : 'Copiar link'}</button>
     </div>
   </section>
+}
+
+function OpeningHoursEditor({ value, schedule, onChange }) {
+  if (!schedule) {
+    return <div className={styles.hoursLegacy}>
+      <span className={styles.fieldLabel}>Horarios de atención</span>
+      <p>Horario actual: {value}</p>
+      <button className={styles.textButton} type="button" onClick={() => onChange(createEmptyOpeningSchedule())}>Configurar horarios por día</button>
+    </div>
+  }
+
+  function updateDay(index, changes) {
+    onChange(schedule.map((day, dayIndex) => dayIndex === index ? { ...day, ...changes } : day))
+  }
+
+  return <div className={styles.hoursEditor}>
+    <span className={styles.fieldLabel}>Horarios de atención</span>
+    <p className={styles.hoursHint}>Elegí los días y cargá uno o dos turnos. Por ejemplo, mañana y noche.</p>
+    <div className={styles.hoursDays}>
+      {schedule.map((day, index) => <div className={styles.hoursDay} key={day.day}>
+        <div className={styles.hoursDayHeading}>
+          <strong>{openingDayNames[index]}</strong>
+          <label><input type="checkbox" checked={day.isOpen} onChange={(event) => updateDay(index, { isOpen: event.target.checked })} /> Abierto</label>
+        </div>
+        {day.isOpen && <div className={styles.hoursShifts}>
+          <div className={styles.hoursShift}>
+            <strong>Turno 1</strong>
+            <label>Desde<input className={styles.textInput} type="time" value={day.firstStart} onChange={(event) => updateDay(index, { firstStart: event.target.value })} /></label>
+            <label>Hasta<input className={styles.textInput} type="time" value={day.firstEnd} onChange={(event) => updateDay(index, { firstEnd: event.target.value })} /></label>
+          </div>
+          {day.hasSecondShift ? <>
+            <div className={styles.hoursShift}>
+              <strong>Turno 2</strong>
+              <label>Desde<input className={styles.textInput} type="time" value={day.secondStart} onChange={(event) => updateDay(index, { secondStart: event.target.value })} /></label>
+              <label>Hasta<input className={styles.textInput} type="time" value={day.secondEnd} onChange={(event) => updateDay(index, { secondEnd: event.target.value })} /></label>
+            </div>
+            <button className={styles.textButton} type="button" onClick={() => updateDay(index, { hasSecondShift: false, secondStart: '', secondEnd: '' })}>Quitar segundo turno</button>
+          </> : <button className={styles.textButton} type="button" onClick={() => updateDay(index, { hasSecondShift: true })}>+ Agregar segundo turno</button>}
+        </div>}
+      </div>)}
+    </div>
+  </div>
 }
 
 function BillingPanel({ token, billing, isSuspended, onError }) {
