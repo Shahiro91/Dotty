@@ -290,6 +290,23 @@
 .customerTable th { color: #70766f; font-size: 10px; }
 .customerTable a { color: #ad4a2c; text-decoration: none; }
 @media (max-width: 900px) { .shell { grid-template-columns: 205px minmax(0, 1fr); } .content { padding: 0 18px 28px; } .settingsGrid, .managementGrid { grid-template-columns: 1fr; } .categoriesGrid { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); } .statsKpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 900px) {
+  .shell { display: flex; flex-direction: column; }
+  .sidebar { width: 100%; min-width: 0; min-height: auto; padding: 12px 10px 8px; position: static; align-self: stretch; }
+  .mobileSidebarHeader { display: flex; align-items: center; gap: 8px; }
+  .brand { flex: 1; margin: 0 4px 12px; }
+  .mobileMenuToggle { width: 40px; height: 40px; margin: 0 4px 12px 0; padding: 0; display: grid; place-items: center; border: 1px solid #5b5d5f; border-radius: 5px; background: transparent; color: #f1f1ef; cursor: pointer; }
+  .sidebarLabel { display: none; }
+  .navigation { display: none; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+  .navigationOpen { display: grid; }
+  .navItem { position: relative; width: 100%; min-width: 0; min-height: 52px; padding: 6px 3px; display: flex; flex-direction: column; justify-content: center; gap: 4px; }
+  .navItem .navLabel { font-size: 9px; line-height: 1.15; text-align: center; white-space: normal; }
+  .navVip { margin: 0; padding: 2px 4px; font-size: 7px; }
+  .navCount { position: absolute; top: 2px; right: 4px; min-width: 16px; height: 16px; margin: 0; font-size: 9px; }
+  .sidebarBottom { margin-top: 8px; padding: 8px 4px 0; display: grid; grid-template-columns: 1fr; gap: 8px; }
+  .sidebarBottom .planPill, .ownerName { display: none; }
+  .logoutButton { width: 100%; min-height: 42px; margin: 0; justify-content: center; border: 1px solid #66696b; background: #484a4c; font-size: 12px; }
+}
 @media (max-width: 640px) {
   .shell { display: flex; flex-direction: column; }
   .sidebar { width: 100%; min-width: 0; min-height: auto; padding: 12px 10px 8px; position: static; align-self: stretch; }

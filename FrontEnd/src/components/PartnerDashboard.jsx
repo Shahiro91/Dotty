@@ -68,9 +68,9 @@ function cropProductImage(imageDataUrl, imageScale, imagePositionX, imagePositio
 
 function PartnerDashboard({ token, user, onSignOut }) {
   const [currentTime, setCurrentTime] = useState(() => Date.now())
-  const [isMobile, setIsMobile] = useState(() => window.matchMedia('(max-width: 640px)').matches)
+  const [isMobile, setIsMobile] = useState(() => window.matchMedia('(max-width: 900px)').matches)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
-  const [section, setSection] = useState(() => window.matchMedia('(max-width: 640px)').matches ? 'store' : 'orders')
+  const [section, setSection] = useState(() => window.matchMedia('(max-width: 900px)').matches ? 'store' : 'orders')
   const [business, setBusiness] = useState(null)
   const [categories, setCategories] = useState([])
   const [categoryAddons, setCategoryAddons] = useState([])
@@ -110,7 +110,7 @@ function PartnerDashboard({ token, user, onSignOut }) {
   }, [])
 
   useEffect(() => {
-    const mediaQuery = window.matchMedia('(max-width: 640px)')
+    const mediaQuery = window.matchMedia('(max-width: 900px)')
     const updateViewport = (event) => {
       setIsMobile(event.matches)
       if (event.matches) {
