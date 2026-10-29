@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArrowRight, Award, Flame, Gift, LoaderCircle, LogIn, MapPin, MessageCircle, Minus, Plus, Printer, ShoppingBag, Store, X } from 'lucide-react'
+import { ArrowRight, Award, Clock3, Flame, Gift, LoaderCircle, LogIn, MapPin, MessageCircle, Minus, Plus, Printer, ShoppingBag, Store, X } from 'lucide-react'
 import { apiRequest } from '../lib/api.js'
 import { getBusinessFontVariables } from '../lib/businessStyle.js'
 import { currency } from '../data/menu.js'
@@ -9,6 +9,13 @@ import styles from './LocalStorefront.module.css'
 const paymentLabels = { mercado_pago: 'Mercado Pago', cash: 'Efectivo' }
 const fulfillmentLabel = (order) => order.fulfillmentType === 'delivery' ? `Delivery - ${order.deliveryAddress}` : 'Retira en el local'
 const formatOrderDate = (value) => new Intl.DateTimeFormat('es-AR', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Argentina/Buenos_Aires' }).format(new Date(value))
+function formatTodaysOpeningHours(openingHours) {
+  if (!openingHours) return ''
+  const weekday = new Intl.DateTimeFormat('en-US', { weekday: 'short', timeZone: 'America/Argentina/Buenos_Aires' }).format(new Date())
+  const dayCodes = { Mon: 'Lun', Tue: 'Mar', Wed: 'Mié', Thu: 'Jue', Fri: 'Vie', Sat: 'Sáb', Sun: 'Dom' }
+  const today = openingHours.split(' · ').find((entry) => entry.startsWith(`${dayCodes[weekday]}: `))
+  return today ? `Hoy: ${today.slice(today.indexOf(':') + 2)}` : openingHours
+}
 
 function buildWhatsappMessage(order, user, business) {
   const money = (value) => currency.format(value)
@@ -343,7 +350,7 @@ function LocalStorefront({ slug, session, onAuthenticate, onSignOut, isPreview =
           <p>{business.description || 'Productos hechos para disfrutar.'}</p>
           <div className={styles.details}>
             {business.address && <span><MapPin size={15} /> {business.address}</span>}
-            {business.openingHours && <span>{business.openingHours}</span>}
+            {business.openingHours && <span><Clock3 size={15} /> {formatTodaysOpeningHours(business.openingHours)}</span>}
             {business.whatsapp && <a href={`https://wa.me/${business.whatsapp.replace(/\D/g, '')}`}><MessageCircle size={15} /> WhatsApp</a>}
           </div>
         </div>

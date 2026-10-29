@@ -728,7 +728,7 @@ function PartnerDashboard({ token, user, onSignOut }) {
             <textarea className={styles.textArea} id="business-description" maxLength={1000} rows={3} value={business.description} onChange={(event) => updateBusiness('description', event.target.value)} />
             <label className={styles.fieldLabel} htmlFor="business-address">Dirección</label>
             <input className={styles.textInput} id="business-address" maxLength={200} value={business.address} onChange={(event) => updateBusiness('address', event.target.value)} />
-            <OpeningHoursEditor value={business.openingHours} schedule={openingHoursSchedule} onChange={setOpeningHoursSchedule} />
+            <OpeningHoursEditor value={business.openingHours} schedule={openingHoursSchedule} isMobile={isMobile} onChange={setOpeningHoursSchedule} />
             <label className={styles.fieldLabel} htmlFor="business-whatsapp">WhatsApp</label>
             <input className={styles.textInput} id="business-whatsapp" type="tel" maxLength={20} value={business.whatsapp} onChange={(event) => updateBusiness('whatsapp', event.target.value)} />
           </section>
@@ -1132,7 +1132,7 @@ function ShareLink({ slug }) {
   </section>
 }
 
-function OpeningHoursEditor({ value, schedule, onChange }) {
+function OpeningHoursEditor({ value, schedule, isMobile, onChange }) {
   if (!schedule) {
     return <div className={styles.hoursLegacy}>
       <span className={styles.fieldLabel}>Horarios de atención</span>
@@ -1149,12 +1149,14 @@ function OpeningHoursEditor({ value, schedule, onChange }) {
     <span className={styles.fieldLabel}>Horarios de atención</span>
     <p className={styles.hoursHint}>Elegí los días y cargá uno o dos turnos. Por ejemplo, mañana y noche.</p>
     <div className={styles.hoursDays}>
-      {schedule.map((day, index) => <div className={styles.hoursDay} key={day.day}>
-        <div className={styles.hoursDayHeading}>
+      {schedule.map((day, index) => <details className={styles.hoursDay} key={day.day} open={!isMobile}>
+        <summary className={styles.hoursDaySummary}>
           <strong>{openingDayNames[index]}</strong>
-          <label><input type="checkbox" checked={day.isOpen} onChange={(event) => updateDay(index, { isOpen: event.target.checked })} /> Abierto</label>
-        </div>
-        {day.isOpen && <div className={styles.hoursShifts}>
+          <span>{day.isOpen ? [day.firstStart && day.firstEnd ? `${day.firstStart}–${day.firstEnd}` : 'Horario incompleto', day.hasSecondShift && day.secondStart && day.secondEnd ? `${day.secondStart}–${day.secondEnd}` : day.hasSecondShift ? 'Segundo turno incompleto' : ''].filter(Boolean).join(' · ') : 'Cerrado'}</span>
+        </summary>
+        <div className={styles.hoursDayContent}>
+          <label className={styles.hoursOpenToggle}><input type="checkbox" checked={day.isOpen} onChange={(event) => updateDay(index, { isOpen: event.target.checked })} /> Abierto este día</label>
+          {day.isOpen && <div className={styles.hoursShifts}>
           <div className={styles.hoursShift}>
             <strong>Turno 1</strong>
             <label>Desde<input className={styles.textInput} type="time" value={day.firstStart} onChange={(event) => updateDay(index, { firstStart: event.target.value })} /></label>
@@ -1168,8 +1170,9 @@ function OpeningHoursEditor({ value, schedule, onChange }) {
             </div>
             <button className={styles.textButton} type="button" onClick={() => updateDay(index, { hasSecondShift: false, secondStart: '', secondEnd: '' })}>Quitar segundo turno</button>
           </> : <button className={styles.textButton} type="button" onClick={() => updateDay(index, { hasSecondShift: true })}>+ Agregar segundo turno</button>}
-        </div>}
-      </div>)}
+          </div>}
+        </div>
+      </details>)}
     </div>
   </div>
 }
