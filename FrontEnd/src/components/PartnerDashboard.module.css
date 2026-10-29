@@ -36,7 +36,7 @@
 .loading { min-height: 100vh; display: flex; align-items: center; justify-content: center; gap: 10px; color: #5d655e; font-size: 13px; }
 .spinner { animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
-.board { margin-top: 22px; display: grid; grid-template-columns: repeat(3, minmax(250px, 1fr)); align-items: start; gap: 14px; overflow-x: auto; padding-bottom: 15px; }
+.board { margin-top: 22px; display: grid; grid-template-columns: repeat(4, minmax(250px, 1fr)); align-items: start; gap: 14px; overflow-x: auto; padding-bottom: 15px; }
 .statsDashboard { margin-top: 20px; display: grid; gap: 13px; }
 .statsHeader { display: flex; align-items: end; justify-content: space-between; gap: 12px; }
 .statsHeader h2 { margin: 4px 0 0; color: #303a33; font-family: var(--business-heading-font, var(--serif)); font-size: 20px; text-transform: capitalize; }
@@ -123,6 +123,7 @@
 .historyList small { margin-top: 3px; display: block; color: #858a83; font-size: 11px; }
 .historyRight { display: grid; justify-items: end; gap: 4px; }
 .historyStatus { padding: 2px 8px; border-radius: 99px; background: #fff1e0; color: #b45a12; font-size: 10px; font-style: normal; font-weight: 800; }
+.status_confirmed { background: #e4f1e4; color: #386e3e; }
 .status_sent { background: #edf5ea; color: #416a3e; }
 .status_cancelled { background: #f9e6e3; color: #a33a2c; }
 .historyDetail { padding: 16px; font-size: 13px; }
@@ -148,12 +149,15 @@
 .orderDiscount span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .orderDiscount strong { flex: 0 0 auto; }
 .pointsEarned { margin: 8px 0 0; color: #55734e; font-size: 10px; }
-.orderActions { margin-top: 11px; display: flex; align-items: center; gap: 6px; }
+.orderActions { margin-top: 11px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .printTicketButton { width: 33px; min-height: 33px; flex: 0 0 auto; display: grid; place-items: center; border: 1px solid #d9ddd5; border-radius: 4px; background: white; color: #48534a; cursor: pointer; }
-.sendButton, .cancelButton { min-height: 33px; padding: 0 8px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; border: 1px solid #d9ddd5; border-radius: 4px; background: white; color: #48534a; cursor: pointer; font: inherit; font-size: 10px; font-weight: 750; }
+.confirmButton, .sendButton, .cancelButton, .whatsappButton { min-height: 33px; padding: 0 8px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; border: 1px solid #d9ddd5; border-radius: 4px; background: white; color: #48534a; cursor: pointer; font: inherit; font-size: 10px; font-weight: 750; text-decoration: none; }
+.confirmButton { flex: 1; border-color: #d4e3d0; background: #edf5ea; color: #416a3e; }
 .sendButton { flex: 1; border-color: #d4e3d0; background: #edf5ea; color: #416a3e; }
 .cancelButton { border-color: #ead8d2; color: #a34835; }
-.sendButton:hover { background: #dfedda; }
+.whatsappButton { border-color: #c9e5d1; background: #eaf6ee; color: #267442; }
+.confirmButton:hover, .sendButton:hover { background: #dfedda; }
+.whatsappButton:hover { background: #dff0e5; }
 .cancelButton:hover { background: #f8eae6; }
 .orderActions button:disabled { opacity: .55; cursor: wait; }
 .settingsGrid, .managementGrid { margin-top: 22px; display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(280px, .8fr); align-items: start; gap: 16px; }

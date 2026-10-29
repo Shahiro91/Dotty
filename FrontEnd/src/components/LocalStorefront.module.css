@@ -27,6 +27,13 @@
 .details a { color: var(--store-secondary); font-weight: 750; }
 .heroWithBanner .details a { color: white; }
 .bonusNotice { min-height: 42px; padding: 9px max(20px, calc((100vw - 1160px) / 2)); display: flex; align-items: center; gap: 8px; background: color-mix(in srgb, var(--store-secondary), white 90%); color: var(--store-secondary); font-size: 12px; font-weight: 750; }
+.orderTrackingNotice { width: min(1160px, calc(100% - 40px)); margin: 16px auto; padding: 13px 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid #ead7c8; border-radius: 8px; background: #fff8ee; color: #51453a; }
+.orderTrackingNotice strong { font-size: 14px; }
+.orderTrackingNotice p { margin: 4px 0 0; color: #71685f; font-size: 12px; line-height: 1.45; }
+.orderTrackingNotice button { width: 34px; height: 34px; flex: 0 0 auto; display: grid; place-items: center; border: 0; border-radius: 50%; background: transparent; color: inherit; cursor: pointer; }
+.orderTracking_confirmed { border-color: #b8d7bd; background: #edf7ee; color: #2f6338; }
+.orderTracking_sent { border-color: #c9d9e7; background: #f0f6fb; color: #3d607c; }
+.orderTracking_cancelled { border-color: #efc4bd; background: #fbe9e6; color: #8c2f22; }
 .main { width: min(1160px, calc(100% - 40px)); margin: 28px auto 60px; display: grid; grid-template-columns: minmax(0, 1fr) 300px; align-items: start; gap: 23px; }
 .pointsCard { width: min(1160px, calc(100% - 40px)); box-sizing: border-box; margin: 22px auto 0; padding: 18px 22px; display: flex; align-items: center; gap: 28px; border-radius: 10px; background: var(--store-secondary); color: #fff; }
 .pointsTotal { display: grid; gap: 2px; flex-shrink: 0; }

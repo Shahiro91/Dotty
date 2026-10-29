@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { AlertCircle, ArrowLeft, ArrowUpRight, BarChart3, Check, ChevronDown, ChevronRight, CircleDollarSign, Copy, CreditCard, Eye, FileSpreadsheet, FolderOpen, History, ImagePlus, LoaderCircle, LogOut, Menu, Package, Pencil, Plus, Printer, RefreshCw, Save, Sparkles, Store, Trash2, Users, UserPlus, X } from 'lucide-react'
+import { AlertCircle, ArrowLeft, ArrowUpRight, BarChart3, Check, ChevronDown, ChevronRight, CircleDollarSign, Copy, CreditCard, Eye, FileSpreadsheet, FolderOpen, History, ImagePlus, LoaderCircle, LogOut, Menu, MessageCircle, Package, Pencil, Plus, Printer, RefreshCw, Save, Sparkles, Store, Trash2, Users, UserPlus, X } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 import { apiRequest } from '../lib/api.js'
 import { businessFontOptions, getBusinessFontVariables } from '../lib/businessStyle.js'
@@ -34,9 +34,10 @@ const weekDays = [
 ]
 
 const orderStatuses = [
-  { id: 'in_process', label: 'En proceso' },
-  { id: 'sent', label: 'Enviado' },
-  { id: 'cancelled', label: 'Cancelado' },
+  { id: 'in_process', label: 'Pedidos entrantes' },
+  { id: 'confirmed', label: 'Confirmados' },
+  { id: 'sent', label: 'Enviados' },
+  { id: 'cancelled', label: 'Cancelados' },
 ]
 
 const emptyProduct = { name: '', description: '', category: '', price: '', pointsPerUnit: '0', imageDataUrl: '', imageScale: 1, imagePositionX: 50, imagePositionY: 50 }
@@ -282,6 +283,10 @@ function PartnerDashboard({ token, user, onSignOut }) {
   const cropShiftY = (50 - (productDraft.imagePositionY ?? 50)) * productDraft.imageScale * (1 - cropWindowHeight)
   async function saveBusiness(event) {
     event.preventDefault()
+    if (!business.bannerDataUrl) {
+      setError('Completá los campos obligatorios: falta cargar el banner de la página.')
+      return
+    }
     if (openingHoursSchedule) {
       const scheduleError = openingScheduleError(openingHoursSchedule)
       if (scheduleError) {
@@ -534,8 +539,8 @@ function PartnerDashboard({ token, user, onSignOut }) {
   }
 
   async function startNewShift() {
-    const pending = boardOrders.filter((order) => order.status === 'in_process').length
-    const warning = pending ? ` Tenés ${pending} pedido${pending === 1 ? '' : 's'} en proceso que también se van a quitar del tablero.` : ''
+    const pending = boardOrders.filter((order) => ['in_process', 'confirmed'].includes(order.status)).length
+    const warning = pending ? ` Tenés ${pending} pedido${pending === 1 ? '' : 's'} entrante${pending === 1 ? '' : 's'} o confirmado${pending === 1 ? '' : 's'} que también se van a quitar del tablero.` : ''
     if (!window.confirm(`¿Comenzar una nueva jornada? El tablero quedará vacío.${warning} Los pedidos siguen guardados en el historial.`)) return
     setIsStartingShift(true)
     setError('')
@@ -554,7 +559,7 @@ function PartnerDashboard({ token, user, onSignOut }) {
       await apiRequest(`/partner/orders/${order.id}`, { method: 'PATCH', token, body: { status } })
       setOrders((current) => current.map((item) => item.id === order.id ? { ...item, status } : item))
       await refreshStatistics()
-      flash(status === 'cancelled' ? 'Pedido cancelado y puntos revertidos.' : 'Pedido marcado como enviado.')
+      flash(status === 'cancelled' ? 'Pedido cancelado y puntos revertidos.' : status === 'confirmed' ? 'Pedido confirmado. Ya podés avisarle al cliente.' : 'Pedido marcado como enviado.')
     } catch (statusError) { setError(statusError.message) } finally { setBusyOrderId(null) }
   }
 
@@ -693,7 +698,7 @@ function PartnerDashboard({ token, user, onSignOut }) {
       <section className={styles.content}>
         <header className={styles.topbar}>
           <div><span className={styles.eyebrow}>{business.name}</span><h1>{sections.find((item) => item.id === section)?.label}</h1></div>
-          {section === 'store' && <button className={styles.topbarSaveButton} type="submit" form="business-settings-form" disabled={isSaving || !business.bannerDataUrl}><Save size={16} /> {isSaving ? 'Guardando...' : 'Guardar cambios'}</button>}
+          {section === 'store' && <button className={styles.topbarSaveButton} type="submit" form="business-settings-form" disabled={isSaving}><Save size={16} /> {isSaving ? 'Guardando...' : 'Guardar cambios'}</button>}
         </header>
         {error && <p className={styles.error} role="alert">{error}</p>}
         {message && <p className={styles.toast} role="status">{message}</p>}
@@ -1087,7 +1092,7 @@ function OrderTicket({ order, businessName }) {
   </div>
 }
 
-const statusLabels = { in_process: 'En proceso', sent: 'Enviado', cancelled: 'Cancelado' }
+const statusLabels = { in_process: 'Entrante', confirmed: 'Confirmado', sent: 'Enviado', cancelled: 'Cancelado' }
 
 function formatLongDate(value) {
   return new Intl.DateTimeFormat('es-AR', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'America/Argentina/Buenos_Aires' }).format(new Date(value))
@@ -1311,7 +1316,11 @@ function OrdersBoard({ orders, businessName, busyOrderId, onChangeStatus }) {
             <div className={styles.orderActions}>
               <button className={styles.printTicketButton} type="button" aria-label={`Imprimir ticket del pedido ${order.id}`} title="Imprimir ticket" onClick={() => printTicket(order.id)}><Printer size={14} /></button>
               {order.status !== 'cancelled' && <>
-                {order.status === 'in_process' && <button className={styles.sendButton} type="button" disabled={busyOrderId === order.id} onClick={() => onChangeStatus(order, 'sent')}><Check size={14} /> Marcar enviado</button>}
+                {order.status === 'in_process' && <button className={styles.confirmButton} type="button" disabled={busyOrderId === order.id} onClick={() => onChangeStatus(order, 'confirmed')}><Check size={14} /> Confirmar pedido</button>}
+                {order.status === 'confirmed' && <>
+                  <button className={styles.sendButton} type="button" disabled={busyOrderId === order.id} onClick={() => onChangeStatus(order, 'sent')}><Check size={14} /> Marcar enviado</button>
+                  <a className={styles.whatsappButton} href={`https://wa.me/${String(order.phone || '').replace(/\D/g, '')}?text=${encodeURIComponent(`¡Pedido confirmado! Hola ${order.firstName}, confirmamos tu pedido #${order.id} en ${businessName}. Ya lo estamos preparando.`)}`} target="_blank" rel="noreferrer"><MessageCircle size={14} /> Avisar por WhatsApp</a>
+                </>}
                 <button className={styles.cancelButton} type="button" disabled={busyOrderId === order.id} onClick={() => onChangeStatus(order, 'cancelled')}><X size={14} /> Cancelar pedido</button>
               </>}
               {busyOrderId === order.id && <LoaderCircle size={16} className={styles.spinner} />}

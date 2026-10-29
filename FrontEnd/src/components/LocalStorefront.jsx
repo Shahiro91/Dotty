@@ -9,6 +9,12 @@ import styles from './LocalStorefront.module.css'
 const paymentLabels = { mercado_pago: 'Mercado Pago', cash: 'Efectivo' }
 const fulfillmentLabel = (order) => order.fulfillmentType === 'delivery' ? `Delivery - ${order.deliveryAddress}` : 'Retira en el local'
 const formatOrderDate = (value) => new Intl.DateTimeFormat('es-AR', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Argentina/Buenos_Aires' }).format(new Date(value))
+const orderTrackingCopy = {
+  in_process: { title: 'Pedido recibido', message: 'Esperando la confirmación del local.' },
+  confirmed: { title: '¡Pedido confirmado!', message: 'El local ya está preparando tu pedido.' },
+  sent: { title: 'Pedido enviado', message: 'El local marcó tu pedido como enviado o listo para retirar.' },
+  cancelled: { title: 'Pedido cancelado', message: 'Contactá al local si tenés alguna duda.' },
+}
 function formatTodaysOpeningHours(openingHours) {
   if (!openingHours) return ''
   const weekday = new Intl.DateTimeFormat('en-US', { weekday: 'short', timeZone: 'America/Argentina/Buenos_Aires' }).format(new Date())
@@ -70,6 +76,7 @@ function buildWhatsappMessage(order, user, business) {
 }
 
 function LocalStorefront({ slug, session, onAuthenticate, onSignOut, isPreview = false, previewData = null }) {
+  const orderTrackingStorageKey = `sabor-vivo-order-${slug}-${session?.user?.id || 'guest'}`
   const [storeData, setStoreData] = useState(previewData)
   const [cart, setCart] = useState([])
   const [customizingProduct, setCustomizingProduct] = useState(null)
@@ -80,6 +87,8 @@ function LocalStorefront({ slug, session, onAuthenticate, onSignOut, isPreview =
   const [redeemingId, setRedeemingId] = useState(null)
   const [selectedRewardId, setSelectedRewardId] = useState(null)
   const [orderReceipt, setOrderReceipt] = useState(null)
+  const [trackedOrderId, setTrackedOrderId] = useState(() => window.localStorage.getItem(orderTrackingStorageKey) || '')
+  const [trackedOrder, setTrackedOrder] = useState(null)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [deliveryAddress, setDeliveryAddress] = useState(() => window.localStorage.getItem('sabor-vivo-address') || '')
@@ -100,6 +109,37 @@ function LocalStorefront({ slug, session, onAuthenticate, onSignOut, isPreview =
     const incomingCode = new URLSearchParams(window.location.search).get('ref')
     if (incomingCode && /^[0-9A-Za-z]{10}$/.test(incomingCode)) window.localStorage.setItem(referralStorageKey, incomingCode.toUpperCase())
   }, [isPreview, referralStorageKey])
+
+  useEffect(() => {
+    setTrackedOrderId(window.localStorage.getItem(orderTrackingStorageKey) || '')
+    setTrackedOrder(null)
+  }, [orderTrackingStorageKey])
+
+  useEffect(() => {
+    if (isPreview || !trackedOrderId || !session?.token || session.user?.role !== 'customer') return
+    let isCurrent = true
+    let intervalId
+    async function refreshOrderStatus() {
+      try {
+        const result = await apiRequest(`/orders/${encodeURIComponent(trackedOrderId)}/status`, { token: session.token })
+        if (!isCurrent) return
+        setTrackedOrder(result)
+        if (result.status === 'sent' || result.status === 'cancelled') window.clearInterval(intervalId)
+      } catch (statusError) {
+        if (!isCurrent || statusError.status !== 404) return
+        window.localStorage.removeItem(orderTrackingStorageKey)
+        setTrackedOrderId('')
+        setTrackedOrder(null)
+        window.clearInterval(intervalId)
+      }
+    }
+    refreshOrderStatus()
+    intervalId = window.setInterval(refreshOrderStatus, 5000)
+    return () => {
+      isCurrent = false
+      window.clearInterval(intervalId)
+    }
+  }, [isPreview, orderTrackingStorageKey, session?.token, session?.user?.role, trackedOrderId])
 
   const canInvite = !isPreview && Boolean(storeData?.business?.referralEnabled) && session?.user?.role === 'customer'
   useEffect(() => {
@@ -265,6 +305,9 @@ function LocalStorefront({ slug, session, onAuthenticate, onSignOut, isPreview =
         },
       })
       window.localStorage.removeItem(referralStorageKey)
+      window.localStorage.setItem(orderTrackingStorageKey, String(result.order.id))
+      setTrackedOrderId(String(result.order.id))
+      setTrackedOrder({ id: result.order.id, status: 'in_process' })
       if (fulfillmentType === 'delivery') window.localStorage.setItem('sabor-vivo-address', deliveryAddress.trim())
       onAuthenticate({ ...session, user: result.user })
       setCart([])
@@ -356,6 +399,10 @@ function LocalStorefront({ slug, session, onAuthenticate, onSignOut, isPreview =
         </div>
       </section>
       {business.bonusPointsActiveToday && <div className={styles.bonusNotice}><Award size={16} /><span>Hoy sumás el doble de puntos en todos tus pedidos.</span></div>}
+      {trackedOrder && <section className={`${styles.orderTrackingNotice} ${styles[`orderTracking_${trackedOrder.status}`] || ''}`} role="status">
+        <div><strong>{orderTrackingCopy[trackedOrder.status]?.title || 'Estado del pedido'}</strong><p>Pedido #{trackedOrder.id} · {orderTrackingCopy[trackedOrder.status]?.message || ''}</p></div>
+        <button type="button" aria-label="Ocultar seguimiento del pedido" onClick={() => { window.localStorage.removeItem(orderTrackingStorageKey); setTrackedOrderId(''); setTrackedOrder(null) }}><X size={17} /></button>
+      </section>}
       {(isPreview || session?.user?.role === 'customer') && <section className={styles.pointsCard} aria-label="Tus puntos">
         <div className={styles.pointsTotal}><span>Tus puntos en {business.name}</span><strong>{userPoints}</strong></div>
         {nextReward

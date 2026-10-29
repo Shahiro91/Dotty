@@ -179,12 +179,14 @@ async function initializeDatabase() {
       product_reward_redemption_id BIGINT REFERENCES business_redemptions(id),
       points_awarded INTEGER NOT NULL CHECK (points_awarded >= 0),
       items JSONB NOT NULL,
-      status VARCHAR(20) NOT NULL DEFAULT 'in_process' CHECK (status IN ('in_process', 'sent', 'cancelled')),
+      status VARCHAR(20) NOT NULL DEFAULT 'in_process' CHECK (status IN ('in_process', 'confirmed', 'sent', 'cancelled')),
       status_changed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
     ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS business_id BIGINT REFERENCES businesses(id);
     ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'in_process' CHECK (status IN ('in_process', 'sent', 'cancelled'));
+    ALTER TABLE customer_orders DROP CONSTRAINT IF EXISTS customer_orders_status_check;
+    ALTER TABLE customer_orders ADD CONSTRAINT customer_orders_status_check CHECK (status IN ('in_process', 'confirmed', 'sent', 'cancelled'));
     ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS status_changed_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
     ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS subtotal INTEGER NOT NULL DEFAULT 0;
     ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS discount_amount INTEGER NOT NULL DEFAULT 0;
@@ -2110,7 +2112,7 @@ app.post('/api/partner/orders/new-shift', authenticate, requirePartner, async (r
 app.patch('/api/partner/orders/:id', authenticate, requirePartner, async (req, res, next) => {
   const orderId = Number(req.params.id)
   const nextStatus = req.body?.status
-  if (!Number.isSafeInteger(orderId) || orderId < 1 || !['sent', 'cancelled'].includes(nextStatus)) {
+  if (!Number.isSafeInteger(orderId) || orderId < 1 || !['confirmed', 'sent', 'cancelled'].includes(nextStatus)) {
     return res.status(400).json({ error: 'El estado del pedido no es válido.' })
   }
   const client = await pool.connect()
@@ -2130,7 +2132,11 @@ app.patch('/api/partner/orders/:id', authenticate, requirePartner, async (req, r
       transactionStarted = false
       return res.status(404).json({ error: 'No se encontró el pedido en tu local.' })
     }
-    if (order.status === 'cancelled' || (order.status === 'sent' && nextStatus === 'sent')) {
+    const invalidTransition = order.status === 'cancelled'
+      || order.status === nextStatus
+      || (nextStatus === 'confirmed' && order.status !== 'in_process')
+      || (nextStatus === 'sent' && order.status !== 'confirmed')
+    if (invalidTransition) {
       await client.query('ROLLBACK')
       transactionStarted = false
       return res.status(409).json({ error: 'Ese pedido ya tiene ese estado y no se puede modificar.' })
@@ -2270,6 +2276,22 @@ app.get('/api/auth/me', authenticate, async (req, res, next) => {
     )
     if (!rows[0]) return res.status(401).json({ error: 'La cuenta ya no está disponible.' })
     res.json(publicCustomer(rows[0], await getBusinessPoints(req.customerId, req.query.businessSlug)))
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.get('/api/orders/:id/status', authenticate, requireCustomer, async (req, res, next) => {
+  const orderId = Number(req.params.id)
+  if (!Number.isSafeInteger(orderId) || orderId < 1) return res.status(400).json({ error: 'El pedido no es válido.' })
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, status, status_changed_at AS "statusChangedAt"
+       FROM customer_orders WHERE id = $1 AND customer_id = $2`,
+      [orderId, req.customerId],
+    )
+    if (!rows[0]) return res.status(404).json({ error: 'No encontramos ese pedido en tu cuenta.' })
+    res.json(rows[0])
   } catch (error) {
     next(error)
   }
