@@ -439,6 +439,7 @@ async function requireAdmin(req, res, next) {
 
 const PLAN_PRICES = { basic: 15000, vip: 25000 }
 const PLAN_LABELS = { basic: 'Básico', vip: 'VIP' }
+const BILLING_INITIAL_TRIAL_DAYS = 7
 const BILLING_GRACE_DAYS = 5
 const BILLING_PAY_WINDOW_DAYS = 10
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -473,9 +474,9 @@ if (MP_ENVIRONMENT === 'sandbox' && process.env.MP_ACCESS_TOKEN) {
     .catch(() => { mercadoPagoAccountIsTest = false })
 }
 
-function describeBilling({ plan, subscriptionDueAt }, now = new Date()) {
+function describeBilling({ plan, subscriptionDueAt }, now = new Date(), graceDays = BILLING_GRACE_DAYS) {
   const dueAt = new Date(subscriptionDueAt)
-  const graceEndsAt = new Date(dueAt.getTime() + BILLING_GRACE_DAYS * DAY_MS)
+  const graceEndsAt = new Date(dueAt.getTime() + graceDays * DAY_MS)
   const status = now <= dueAt ? 'active' : now <= graceEndsAt ? 'grace' : 'suspended'
   return {
     plan,
@@ -496,13 +497,14 @@ async function loadBilling(businessId) {
      FROM subscription_payments WHERE business_id = $1 ORDER BY paid_at DESC LIMIT 12`,
     [businessId],
   )
-  const requiresInitialPayment = payments.length === 0
-  const details = describeBilling(rows[0])
+  const requiresInitialPayment = false
+  const initialTrial = payments.length === 0
+  const details = describeBilling(rows[0], new Date(), initialTrial ? 0 : BILLING_GRACE_DAYS)
   return {
     ...details,
     requiresInitialPayment,
-    status: requiresInitialPayment ? 'payment_required' : details.status,
-    canPay: requiresInitialPayment || details.canPay,
+    initialTrial,
+    canPay: initialTrial || details.canPay,
     payments,
     paymentsConfigured: !mercadoPagoConfigurationMessage(),
     paymentConfigurationMessage: mercadoPagoConfigurationMessage(),
@@ -579,10 +581,10 @@ function partnerGuard({ allowSuspended }) {
         return res.status(403).json({ error: 'Tu cuenta no tiene un local activo asociado.' })
       }
       req.businessId = rows[0].business_id
-      if (!allowSuspended && !rows[0].hasPaidSubscription) {
-        return res.status(403).json({ error: 'Para comenzar a usar el panel, primero aboná tu suscripción.', code: 'initial_payment_required' })
+      if (!allowSuspended && describeBilling(rows[0], new Date(), rows[0].hasPaidSubscription ? BILLING_GRACE_DAYS : 0).status === 'suspended') {
+        return res.status(403).json({ error: SUSPENDED_MESSAGE, code: 'subscription_suspended' })
       }
-      if (!allowSuspended && describeBilling(rows[0]).status === 'suspended') {
+      if (!allowSuspended && describeBilling(rows[0], new Date(), rows[0].hasPaidSubscription ? BILLING_GRACE_DAYS : 0).status === 'suspended') {
         return res.status(403).json({ error: SUSPENDED_MESSAGE, code: 'subscription_suspended' })
       }
       next()
@@ -596,8 +598,13 @@ const requirePartner = partnerGuard({ allowSuspended: false })
 const requirePartnerBilling = partnerGuard({ allowSuspended: true })
 
 async function isBusinessSuspended(queryable, businessId) {
-  const { rows } = await queryable.query('SELECT plan, subscription_due_at AS "subscriptionDueAt" FROM businesses WHERE id = $1', [businessId])
-  return rows[0] ? describeBilling(rows[0]).status === 'suspended' : false
+  const { rows } = await queryable.query(
+    `SELECT plan, subscription_due_at AS "subscriptionDueAt",
+            EXISTS (SELECT 1 FROM subscription_payments sp WHERE sp.business_id = businesses.id) AS "hasPaidSubscription"
+     FROM businesses WHERE id = $1`,
+    [businessId],
+  )
+  return rows[0] ? describeBilling(rows[0], new Date(), rows[0].hasPaidSubscription ? BILLING_GRACE_DAYS : 0).status === 'suspended' : false
 }
 
 async function requireVip(req, res, next) {
@@ -1143,6 +1150,7 @@ app.post('/api/auth/claim-business', authenticate, rateLimit('claim', 8, 15 * 60
       'UPDATE local_applications SET activation_code_hash = NULL, activation_expires_at = NULL, claimed_at = NOW() WHERE id = $1',
       [application.id],
     )
+    await client.query('UPDATE businesses SET subscription_due_at = NOW() + make_interval(days => $2) WHERE id = $1', [application.business_id, BILLING_INITIAL_TRIAL_DAYS])
     await client.query('COMMIT')
     transactionStarted = false
     const user = publicCustomer(customers[0])
@@ -2234,6 +2242,7 @@ app.post('/api/auth/login', rateLimit('login', 20, 15 * 60_000), async (req, res
           'UPDATE local_applications SET activation_code_hash = NULL, activation_expires_at = NULL, claimed_at = NOW() WHERE id = $1',
           [application.id],
         )
+        await client.query('UPDATE businesses SET subscription_due_at = NOW() + make_interval(days => $2) WHERE id = $1', [application.business_id, BILLING_INITIAL_TRIAL_DAYS])
         await client.query('COMMIT')
         transactionStarted = false
       } catch (error) {

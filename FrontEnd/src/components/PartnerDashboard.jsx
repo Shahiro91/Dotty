@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { AlertCircle, ArrowLeft, ArrowUpRight, BarChart3, Check, ChevronDown, ChevronRight, CircleDollarSign, Copy, CreditCard, Eye, FileSpreadsheet, FolderOpen, History, ImagePlus, LoaderCircle, LogOut, Package, Pencil, Plus, Printer, RefreshCw, Save, Sparkles, Store, Trash2, Users, UserPlus, X } from 'lucide-react'
+import { AlertCircle, ArrowLeft, ArrowUpRight, BarChart3, Check, ChevronDown, ChevronRight, CircleDollarSign, Copy, CreditCard, Eye, FileSpreadsheet, FolderOpen, History, ImagePlus, LoaderCircle, LogOut, Menu, Package, Pencil, Plus, Printer, RefreshCw, Save, Sparkles, Store, Trash2, Users, UserPlus, X } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 import { apiRequest } from '../lib/api.js'
 import { businessFontOptions, getBusinessFontVariables } from '../lib/businessStyle.js'
@@ -68,7 +68,9 @@ function cropProductImage(imageDataUrl, imageScale, imagePositionX, imagePositio
 
 function PartnerDashboard({ token, user, onSignOut }) {
   const [currentTime, setCurrentTime] = useState(() => Date.now())
-  const [section, setSection] = useState('orders')
+  const [isMobile, setIsMobile] = useState(() => window.matchMedia('(max-width: 640px)').matches)
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [section, setSection] = useState(() => window.matchMedia('(max-width: 640px)').matches ? 'store' : 'orders')
   const [business, setBusiness] = useState(null)
   const [categories, setCategories] = useState([])
   const [categoryAddons, setCategoryAddons] = useState([])
@@ -105,6 +107,20 @@ function PartnerDashboard({ token, user, onSignOut }) {
   useEffect(() => {
     const intervalId = window.setInterval(() => setCurrentTime(Date.now()), 60_000)
     return () => window.clearInterval(intervalId)
+  }, [])
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(max-width: 640px)')
+    const updateViewport = (event) => {
+      setIsMobile(event.matches)
+      if (event.matches) {
+        setSection((currentSection) => currentSection === 'orders' ? 'store' : currentSection)
+        setIsMobileMenuOpen(false)
+        setIsHistoryOpen(false)
+      }
+    }
+    mediaQuery.addEventListener('change', updateViewport)
+    return () => mediaQuery.removeEventListener('change', updateViewport)
   }, [])
 
   useEffect(() => {
@@ -566,7 +582,9 @@ function PartnerDashboard({ token, user, onSignOut }) {
   const isInGracePeriod = billing && currentTime > new Date(billing.dueAt).getTime() && !isPastGracePeriod
   const isSuspended = billing?.status === 'suspended' || isPastGracePeriod
   const isPaymentRequired = billing?.requiresInitialPayment === true
-  const visibleSections = isSuspended || isPaymentRequired ? sections.filter((item) => item.id === 'billing') : sections
+  const visibleSections = isSuspended || isPaymentRequired
+    ? sections.filter((item) => item.id === 'billing')
+    : sections.filter((item) => !isMobile || item.id !== 'orders')
   const daysToDue = billing ? calendarDaysBetween(new Date(currentTime), new Date(billing.dueAt)) : null
   const billingAlert = !billing || isSuspended ? '' : billing.status === 'grace'
     ? `Tu suscripción venció. Tenés hasta el ${formatLongDate(billing.graceEndsAt)} para pagar; después tu cuenta se suspende.`
@@ -579,15 +597,20 @@ function PartnerDashboard({ token, user, onSignOut }) {
   return (
     <main className={styles.shell} style={{ ...getBusinessFontVariables(business.fontFamily), '--store-primary': business.primaryColor || '#c95031', '--store-secondary': business.secondaryColor || '#58705e', '--logo-scale': business.logoScale || 1 }}>
       <aside className={styles.sidebar}>
-        <a className={styles.brand} href={`/local/${business.slug}`} target="_blank" rel="noreferrer">
-          <span className={styles.brandMark}>{business.logoDataUrl ? <img src={business.logoDataUrl} alt="" /> : <Store size={18} />}</span>
-          <span><strong>{business.name}</strong><small>Panel del local</small></span>
-          <ArrowUpRight className={styles.brandArrow} size={16} />
-        </a>
+        <div className={styles.mobileSidebarHeader}>
+          <a className={styles.brand} href={`/local/${business.slug}`} target="_blank" rel="noreferrer">
+            <span className={styles.brandMark}>{business.logoDataUrl ? <img src={business.logoDataUrl} alt="" /> : <Store size={18} />}</span>
+            <span><strong>{business.name}</strong><small>Panel del local</small></span>
+            <ArrowUpRight className={styles.brandArrow} size={16} />
+          </a>
+          <button className={styles.mobileMenuToggle} type="button" aria-label={isMobileMenuOpen ? 'Cerrar menú' : 'Abrir menú'} aria-expanded={isMobileMenuOpen} onClick={() => setIsMobileMenuOpen((open) => !open)}>
+            {isMobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
+          </button>
+        </div>
         <span className={styles.sidebarLabel}>GESTIÓN</span>
-        <nav className={styles.navigation} aria-label="Secciones del panel">
+        <nav className={`${styles.navigation} ${isMobileMenuOpen ? styles.navigationOpen : ''}`} aria-label="Secciones del panel">
           {visibleSections.map(({ id, label, icon: Icon }) => (
-            <button key={id} className={`${styles.navItem} ${section === id ? styles.navActive : ''}`} type="button" aria-current={section === id ? 'page' : undefined} onClick={() => setSection(id)}>
+            <button key={id} className={`${styles.navItem} ${section === id ? styles.navActive : ''}`} type="button" aria-current={section === id ? 'page' : undefined} onClick={() => { setSection(id); setIsMobileMenuOpen(false) }}>
               <Icon size={17} /><span className={styles.navLabel}>{label}</span>
               {(id === 'bonus-points' || id === 'catalog-import') && <span className={styles.navVip}>VIP</span>}
               {id === 'orders' && orders.filter((order) => order.status === 'in_process').length > 0 && <span className={styles.navCount}>{orders.filter((order) => order.status === 'in_process').length}</span>}
@@ -611,7 +634,7 @@ function PartnerDashboard({ token, user, onSignOut }) {
         {billingAlert && section !== 'billing' && <button type="button" className={styles.billingAlert} onClick={() => setSection('billing')}><AlertCircle size={16} /> {billingAlert} <strong>Ver suscripción</strong></button>}
 
         {section === 'billing' && <BillingPanel token={token} billing={billing} isSuspended={isSuspended} onError={setError} />}
-        {section === 'orders' && <>
+        {!isMobile && section === 'orders' && <>
           <div className={styles.ordersToolbar}>
             <button type="button" className={styles.shiftButton} disabled={isStartingShift} onClick={startNewShift}>{isStartingShift ? <LoaderCircle size={15} className={styles.spinner} /> : <RefreshCw size={15} />} Nueva jornada</button>
             <button type="button" className={styles.historyButton} onClick={() => setIsHistoryOpen(true)}><History size={15} /> Historial</button>
@@ -1048,7 +1071,7 @@ function BillingPanel({ token, billing, isSuspended, onError }) {
   const [isPaying, setIsPaying] = useState(false)
   if (!billing) return <p className={styles.columnEmpty}>Cargando tu suscripción...</p>
   const daysToDue = Math.ceil((new Date(billing.dueAt) - Date.now()) / 86_400_000)
-  const statusText = billing.requiresInitialPayment ? 'Pago inicial pendiente' : billing.status === 'suspended'
+  const statusText = billing.initialTrial && billing.status !== 'suspended' ? 'Período inicial' : billing.requiresInitialPayment ? 'Pago inicial pendiente' : billing.status === 'suspended'
     ? 'Cuenta suspendida'
     : billing.status === 'grace' ? 'Vencida, con plazo para pagar' : 'Al día'
 
@@ -1080,7 +1103,7 @@ function BillingPanel({ token, billing, isSuspended, onError }) {
       <button type="button" className={styles.payButton} disabled={isPaying || !billing.canPay || !billing.paymentsConfigured} onClick={pay}>
         {isPaying ? <LoaderCircle size={16} className={styles.spinner} /> : <CreditCard size={16} />} Pagar {currency.format(billing.price)} con Mercado Pago
       </button>
-      {billing.requiresInitialPayment && <p className={styles.billingHint}>Aboná el primer mes para desbloquear el resto del panel.</p>}
+      {billing.initialTrial && billing.status !== 'suspended' && <p className={styles.billingHint}>Podés usar el panel durante tus primeros 7 días. Aboná antes del {formatLongDate(billing.dueAt)} para evitar la suspensión.</p>}
       {!billing.paymentsConfigured && <p className={styles.billingHint}>{billing.paymentConfigurationMessage || 'El pago online todavía no está habilitado. Contactá a Dotty.'}</p>}
       {billing.paymentsConfigured && !billing.canPay && <p className={styles.billingHint}>El botón de pago se habilita 10 días antes del vencimiento.</p>}
       <p className={styles.billingHint}>Si no pagás dentro de los 5 días posteriores al vencimiento, la cuenta se suspende. No se elimina ningún dato.</p>

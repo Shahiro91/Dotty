@@ -109,7 +109,7 @@ function LandingPage({ onLogin, onRegister }) {
         <section className={styles.hero}>
           <div className={styles.heroCopy}>
             <span className={styles.eyebrow}><Sparkles size={14} /> Para locales gastronómicos</span>
-            <h1>Tu local, abierto las 24 horas en internet.</h1>
+            <h1>Vendé online y hacé que tus clientes vuelvan.</h1>
             <p>Creá tu tienda online, recibí pedidos y premiá a tus clientes con puntos. Todo desde un panel simple y con una suscripción mensual fija.</p>
             <div className={styles.heroActions}>
               <button className={styles.primaryButton} type="button" onClick={onRegister}>Quiero registrar mi local <ArrowRight size={17} /></button>
