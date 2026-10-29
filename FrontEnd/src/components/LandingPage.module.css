@@ -125,7 +125,10 @@
   .browser { width: 100%; }
   .dash { grid-template-columns: 1fr; }
   .dashSide { display: none; }
-  .heroVisual .phone { right: -4px; bottom: -22px; width: 150px; }
+  .heroVisual .phone { right: -4px; bottom: -22px; width: 176px; }
+  .heroVisual .shopBanner { height: 70px; }
+  .heroVisual .shopCard:nth-child(n + 3) { display: none; }
+  .heroVisual .shopCard img { height: 34px; }
   .section { padding: 52px 0; }
   .featureGrid, .steps, .plans { grid-template-columns: 1fr; }
   .primaryButton, .secondaryButton { width: 100%; }
