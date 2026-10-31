@@ -700,11 +700,15 @@ function PartnerDashboard({ token, user, onSignOut }) {
           <div><span className={styles.eyebrow}>{business.name}</span><h1>{sections.find((item) => item.id === section)?.label}</h1></div>
           {section === 'store' && <button className={styles.topbarSaveButton} type="submit" form="business-settings-form" disabled={isSaving}><Save size={16} /> {isSaving ? 'Guardando...' : 'Guardar cambios'}</button>}
         </header>
+        {isMobile && <div className={styles.mobileAccessNotice} role="status">
+          <AlertCircle size={18} aria-hidden="true" />
+          <p><strong>¿Necesitás todas las funcionalidades?</strong> Ingresá desde una computadora. Algunas opciones no están disponibles desde el celular.</p>
+        </div>}
         {error && <p className={styles.error} role="alert">{error}</p>}
         {message && <p className={styles.toast} role="status">{message}</p>}
         {billingAlert && section !== 'billing' && <button type="button" className={styles.billingAlert} onClick={() => setSection('billing')}><AlertCircle size={16} /> {billingAlert} <strong>Ver suscripción</strong></button>}
 
-        {section === 'billing' && <BillingPanel token={token} billing={billing} isSuspended={isSuspended} onError={setError} />}
+        {section === 'billing' && <BillingPanel token={token} billing={billing} setBilling={setBilling} isSuspended={isSuspended} onError={setError} />}
         {!isMobile && section === 'orders' && <>
           <div className={styles.ordersToolbar}>
             <button type="button" className={styles.shiftButton} disabled={isStartingShift} onClick={startNewShift}>{isStartingShift ? <LoaderCircle size={15} className={styles.spinner} /> : <RefreshCw size={15} />} Nueva jornada</button>
@@ -1182,8 +1186,10 @@ function OpeningHoursEditor({ value, schedule, isMobile, onChange }) {
   </div>
 }
 
-function BillingPanel({ token, billing, isSuspended, onError }) {
+function BillingPanel({ token, billing, setBilling, isSuspended, onError }) {
   const [isPaying, setIsPaying] = useState(false)
+  const [isChangingPlan, setIsChangingPlan] = useState(false)
+  const [selectedPlan, setSelectedPlan] = useState('')
   if (!billing) return <p className={styles.columnEmpty}>Cargando tu suscripción...</p>
   const daysToDue = Math.ceil((new Date(billing.dueAt) - Date.now()) / 86_400_000)
   const statusText = billing.initialTrial && billing.status !== 'suspended' ? 'Período inicial' : billing.requiresInitialPayment ? 'Pago inicial pendiente' : billing.status === 'suspended'
@@ -1202,6 +1208,33 @@ function BillingPanel({ token, billing, isSuspended, onError }) {
     }
   }
 
+  async function schedulePlan(plan) {
+    setIsChangingPlan(true)
+    onError('')
+    try {
+      const result = await apiRequest('/partner/billing/plan', { method: 'PUT', token, body: { plan } })
+      setBilling(result.billing)
+      setSelectedPlan('')
+    } catch (changeError) {
+      onError(changeError.message)
+    } finally {
+      setIsChangingPlan(false)
+    }
+  }
+
+  async function cancelPlanChange() {
+    setIsChangingPlan(true)
+    onError('')
+    try {
+      const result = await apiRequest('/partner/billing/plan', { method: 'DELETE', token })
+      setBilling(result.billing)
+    } catch (changeError) {
+      onError(changeError.message)
+    } finally {
+      setIsChangingPlan(false)
+    }
+  }
+
   return <section className={styles.billingPanel}>
     {isSuspended && <div className={styles.billingSuspended}><AlertCircle size={18} /><div><strong>Tu cuenta está suspendida por falta de pago.</strong><p>No se borró nada: tus productos, clientes, puntos y pedidos siguen guardados. Apenas pagues, vas a poder volver a usarla y tu tienda vuelve a estar disponible.</p></div></div>}
     <div className={styles.billingCard}>
@@ -1215,12 +1248,28 @@ function BillingPanel({ token, billing, isSuspended, onError }) {
         {billing.status === 'active' && <div><dt>Faltan</dt><dd>{daysToDue <= 0 ? 'Vence hoy' : `${daysToDue} día${daysToDue === 1 ? '' : 's'}`}</dd></div>}
         {billing.status === 'grace' && <div><dt>Pagá hasta el</dt><dd>{formatLongDate(billing.graceEndsAt)}</dd></div>}
       </dl>
+      <div className={styles.planChange}>
+        {billing.pendingPlan ? <>
+          <p>El plan <strong>{billing.pendingPlanLabel}</strong> quedará activo el {formatLongDate(billing.dueAt)}. Ese día vas a poder pagarlo a {currency.format(billing.pendingPlanPrice)}.</p>
+          <button type="button" className={styles.textButton} disabled={isChangingPlan} onClick={cancelPlanChange}>Cancelar cambio de plan</button>
+        </> : <>
+          <label htmlFor="billing-plan">Cambiar plan a partir del próximo vencimiento</label>
+          <div className={styles.planChangeControls}>
+            <select id="billing-plan" value={selectedPlan} onChange={(event) => setSelectedPlan(event.target.value)} disabled={isChangingPlan}>
+              <option value="">Elegí un plan</option>
+              {(billing.availablePlans || []).map((plan) => <option key={plan.id} value={plan.id} disabled={billing.plan === plan.id}>{plan.label} · {currency.format(plan.price)}/mes</option>)}
+            </select>
+            <button type="button" className={styles.textButton} disabled={!selectedPlan || isChangingPlan} onClick={() => schedulePlan(selectedPlan)}>{isChangingPlan ? 'Guardando...' : 'Programar cambio'}</button>
+          </div>
+          <p>El cambio no tiene un cobro ahora. Se aplicará al vencimiento y el siguiente pago será por el importe del nuevo plan.</p>
+        </>}
+      </div>
       <button type="button" className={styles.payButton} disabled={isPaying || !billing.canPay || !billing.paymentsConfigured} onClick={pay}>
-        {isPaying ? <LoaderCircle size={16} className={styles.spinner} /> : <CreditCard size={16} />} Pagar {currency.format(billing.price)} con Mercado Pago
+        {isPaying ? <LoaderCircle size={16} className={styles.spinner} /> : <CreditCard size={16} />} Pagar {currency.format(billing.pendingPlanPrice || billing.price)} con Mercado Pago
       </button>
       {billing.initialTrial && billing.status !== 'suspended' && <p className={styles.billingHint}>Podés usar el panel durante tus primeros 7 días. Aboná antes del {formatLongDate(billing.dueAt)} para evitar la suspensión.</p>}
       {!billing.paymentsConfigured && <p className={styles.billingHint}>{billing.paymentConfigurationMessage || 'El pago online todavía no está habilitado. Contactá a Dotty.'}</p>}
-      {billing.paymentsConfigured && !billing.canPay && <p className={styles.billingHint}>El botón de pago se habilita 10 días antes del vencimiento.</p>}
+      {billing.paymentsConfigured && !billing.canPay && <p className={styles.billingHint}>{billing.pendingPlan ? 'El pago del nuevo plan se habilita desde la fecha de vencimiento.' : 'El botón de pago se habilita 10 días antes del vencimiento.'}</p>}
       <p className={styles.billingHint}>Si no pagás dentro de los 5 días posteriores al vencimiento, la cuenta se suspende. No se elimina ningún dato.</p>
     </div>
     <div className={styles.billingCard}>

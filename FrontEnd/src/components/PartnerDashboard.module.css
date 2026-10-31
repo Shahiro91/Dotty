@@ -30,6 +30,10 @@
 .topbarSaveButton { min-height: 36px; padding: 0 11px; display: inline-flex; align-items: center; gap: 7px; border: 0; border-radius: 5px; background: var(--store-primary, #c95031); color: white; cursor: pointer; font: inherit; font-size: 11px; font-weight: 750; }
 .topbarSaveButton:hover { filter: brightness(.92); }
 .topbarSaveButton:disabled { opacity: .6; cursor: wait; }
+.mobileAccessNotice { margin: 12px 0 0; padding: 11px 13px; display: flex; align-items: flex-start; gap: 9px; border: 1px solid #e7d49f; border-radius: 5px; background: #fff7df; color: #70531a; }
+.mobileAccessNotice svg { flex: 0 0 auto; margin-top: 1px; }
+.mobileAccessNotice p { margin: 0; font-size: 11px; line-height: 1.5; }
+.mobileAccessNotice strong { display: block; margin-bottom: 2px; font-size: 12px; }
 .error, .toast { margin: 13px 0; padding: 10px 12px; border-radius: 4px; font-size: 12px; }
 .error { background: #faeae6; color: #a13c2a; }
 .toast { background: #eaf3e8; color: #3b6440; }
@@ -105,6 +109,12 @@
 .copyButton { min-height: 39px; padding: 0 16px; display: inline-flex; align-items: center; gap: 6px; border: 0; border-radius: 4px; background: var(--store-primary, #c95031); color: white; cursor: pointer; font: inherit; font-size: 12px; font-weight: 800; white-space: nowrap; }
 @media (max-width: 520px) { .shareRow { flex-direction: column; } }
 .billingHint { margin: 10px 0 0; color: #858a83; font-size: 11px; line-height: 1.5; }
+.planChange { margin: 0 0 14px; padding: 12px; display: grid; gap: 8px; border: 1px solid #e1e1d9; border-radius: 6px; background: #f8f7f1; }
+.planChange > label { color: #4a514a; font-size: 11px; font-weight: 750; }
+.planChange > p { margin: 0; color: #747a72; font-size: 10px; line-height: 1.5; }
+.planChangeControls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.planChangeControls select { min-height: 34px; padding: 0 9px; border: 1px solid #d9dcd4; border-radius: 4px; background: #fffefa; color: #3e4740; font: inherit; font-size: 11px; }
+.planChange .textButton:disabled { opacity: .55; cursor: not-allowed; }
 .billingPayments { margin: 0; padding: 0; display: grid; gap: 10px; list-style: none; }
 .billingPayments li { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; }
 .billingPayments small { display: block; color: #858a83; font-size: 11px; }

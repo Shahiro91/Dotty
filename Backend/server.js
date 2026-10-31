@@ -69,6 +69,7 @@ async function initializeDatabase() {
     ALTER TABLE businesses ADD COLUMN IF NOT EXISTS addons_enabled BOOLEAN NOT NULL DEFAULT TRUE;
     ALTER TABLE businesses ADD COLUMN IF NOT EXISTS orders_shift_started_at TIMESTAMPTZ;
     ALTER TABLE businesses ADD COLUMN IF NOT EXISTS subscription_due_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '1 month');
+    ALTER TABLE businesses ADD COLUMN IF NOT EXISTS pending_plan VARCHAR(20) CHECK (pending_plan IN ('basic', 'vip'));
     ALTER TABLE businesses ALTER COLUMN opening_hours TYPE TEXT;
     CREATE TABLE IF NOT EXISTS subscription_payments (
       id BIGSERIAL PRIMARY KEY,
@@ -493,7 +494,7 @@ function describeBilling({ plan, subscriptionDueAt }, now = new Date(), graceDay
 }
 
 async function loadBilling(businessId) {
-  const { rows } = await pool.query('SELECT plan, subscription_due_at AS "subscriptionDueAt" FROM businesses WHERE id = $1', [businessId])
+  const { rows } = await pool.query('SELECT plan, pending_plan AS "pendingPlan", subscription_due_at AS "subscriptionDueAt" FROM businesses WHERE id = $1', [businessId])
   if (!rows[0]) return null
   const { rows: payments } = await pool.query(
     `SELECT id, plan, amount::float AS amount, period_end AS "periodEnd", paid_at AS "paidAt"
@@ -505,9 +506,13 @@ async function loadBilling(businessId) {
   const details = describeBilling(rows[0], new Date(), initialTrial ? 0 : BILLING_GRACE_DAYS)
   return {
     ...details,
+    pendingPlan: rows[0].pendingPlan,
+    pendingPlanLabel: rows[0].pendingPlan ? PLAN_LABELS[rows[0].pendingPlan] : null,
+    pendingPlanPrice: rows[0].pendingPlan ? PLAN_PRICES[rows[0].pendingPlan] : null,
+    availablePlans: Object.entries(PLAN_PRICES).map(([id, price]) => ({ id, label: PLAN_LABELS[id], price })),
     requiresInitialPayment,
     initialTrial,
-    canPay: initialTrial || details.canPay,
+    canPay: rows[0].pendingPlan ? Date.now() >= new Date(rows[0].subscriptionDueAt).getTime() : initialTrial || details.canPay,
     payments,
     paymentsConfigured: !mercadoPagoConfigurationMessage(),
     paymentConfigurationMessage: mercadoPagoConfigurationMessage(),
@@ -542,20 +547,22 @@ async function applySubscriptionPayment(paymentId) {
   const client = await pool.connect()
   try {
     await client.query('BEGIN')
-    const { rows } = await client.query('SELECT plan FROM businesses WHERE id = $1 FOR UPDATE', [match[1]])
-    if (!rows[0] || Number(payment.transaction_amount) < PLAN_PRICES[rows[0].plan]) {
+    const { rows } = await client.query('SELECT plan, pending_plan AS "pendingPlan" FROM businesses WHERE id = $1 FOR UPDATE', [match[1]])
+    const chargedPlan = rows[0]?.pendingPlan || rows[0]?.plan
+    if (!rows[0] || Number(payment.transaction_amount) < PLAN_PRICES[chargedPlan]) {
       await client.query('ROLLBACK')
       return { applied: false, status: 'invalid' }
     }
     const inserted = await client.query(
       `INSERT INTO subscription_payments (business_id, mp_payment_id, plan, amount)
        VALUES ($1, $2, $3, $4) ON CONFLICT (mp_payment_id) DO NOTHING RETURNING id`,
-      [match[1], String(payment.id), rows[0].plan, payment.transaction_amount],
+      [match[1], String(payment.id), chargedPlan, payment.transaction_amount],
     )
     if (inserted.rowCount) {
       const { rows: updated } = await client.query(
         `UPDATE businesses
-         SET subscription_due_at = (CASE WHEN subscription_due_at + make_interval(days => $2) < NOW() THEN NOW() ELSE subscription_due_at END) + INTERVAL '1 month'
+         SET plan = COALESCE(pending_plan, plan), pending_plan = NULL,
+             subscription_due_at = (CASE WHEN subscription_due_at + make_interval(days => $2) < NOW() THEN NOW() ELSE subscription_due_at END) + INTERVAL '1 month'
          WHERE id = $1 RETURNING subscription_due_at`,
         [match[1], BILLING_GRACE_DAYS],
       )
@@ -1199,6 +1206,27 @@ app.get('/api/partner/billing', authenticate, requirePartnerBilling, async (req,
   }
 })
 
+app.put('/api/partner/billing/plan', authenticate, requirePartnerBilling, async (req, res, next) => {
+  const plan = req.body?.plan
+  if (!Object.hasOwn(PLAN_PRICES, plan)) return res.status(400).json({ error: 'El plan elegido no es válido.' })
+  try {
+    const { rows } = await pool.query(
+      `UPDATE businesses SET pending_plan = CASE WHEN plan = $2 THEN NULL ELSE $2 END
+       WHERE id = $1 RETURNING plan, pending_plan AS "pendingPlan", subscription_due_at AS "subscriptionDueAt"`,
+      [req.businessId, plan],
+    )
+    if (!rows[0]) return res.status(404).json({ error: 'No encontramos el local.' })
+    res.json({ billing: await loadBilling(req.businessId) })
+  } catch (error) { next(error) }
+})
+
+app.delete('/api/partner/billing/plan', authenticate, requirePartnerBilling, async (req, res, next) => {
+  try {
+    await pool.query('UPDATE businesses SET pending_plan = NULL WHERE id = $1', [req.businessId])
+    res.json({ billing: await loadBilling(req.businessId) })
+  } catch (error) { next(error) }
+})
+
 app.post('/api/partner/billing/checkout', authenticate, requirePartnerBilling, async (req, res, next) => {
   try {
     const configurationMessage = mercadoPagoConfigurationMessage()
@@ -1215,7 +1243,7 @@ app.post('/api/partner/billing/checkout', authenticate, requirePartnerBilling, a
     const preference = await mercadoPagoRequest('/checkout/preferences', {
       method: 'POST',
       body: JSON.stringify({
-        items: [{ id: billing.plan, title: `Dotty - Plan ${billing.planLabel} (1 mes)`, quantity: 1, unit_price: billing.price, currency_id: 'ARS' }],
+        items: [{ id: billing.pendingPlan || billing.plan, title: `Dotty - Plan ${billing.pendingPlanLabel || billing.planLabel} (1 mes)`, quantity: 1, unit_price: billing.pendingPlanPrice || billing.price, currency_id: 'ARS' }],
         external_reference: `sabor-vivo-business-${req.businessId}`,
         back_urls: { success: returnUrl, pending: returnUrl, failure: returnUrl },
         ...(origin.startsWith('https://') ? { auto_return: 'approved' } : {}),
