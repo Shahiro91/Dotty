@@ -153,6 +153,7 @@ function PartnerDashboard({ token, user, onSignOut }) {
   const [editingCategory, setEditingCategory] = useState(null)
   const [isCreatingCategory, setIsCreatingCategory] = useState(false)
   const [categoryDraft, setCategoryDraft] = useState('')
+  const [categoryPartsDraft, setCategoryPartsDraft] = useState('0')
   const [editingRewardId, setEditingRewardId] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
@@ -454,8 +455,9 @@ function PartnerDashboard({ token, user, onSignOut }) {
       setError('El nombre de la categoría debe tener entre 1 y 60 caracteres.')
       return
     }
-    if (nextName === editingCategory) {
-      setEditingCategory(null)
+    const fractionalParts = Number(categoryPartsDraft)
+    if (!Number.isInteger(fractionalParts) || (fractionalParts !== 0 && (fractionalParts < 2 || fractionalParts > 12))) {
+      setError('Elegí venta tradicional o entre 2 y 12 partes combinables.')
       return
     }
     setBusyCategory(editingCategory)
@@ -463,14 +465,15 @@ function PartnerDashboard({ token, user, onSignOut }) {
     try {
       await apiRequest('/partner/categories', {
         method: 'PATCH', token,
-        body: { currentName: editingCategory, name: nextName },
+        body: { currentName: editingCategory, name: nextName, fractionalParts },
       })
-      setCategories((current) => current.map((category) => category.name === editingCategory ? { ...category, name: nextName } : category).sort((first, second) => first.name.localeCompare(second.name, 'es')))
+      setCategories((current) => current.map((category) => category.name === editingCategory ? { ...category, name: nextName, fractionalParts } : category).sort((first, second) => first.name.localeCompare(second.name, 'es')))
       setProducts((current) => current.map((product) => product.category === editingCategory ? { ...product, category: nextName } : product))
       setSelectedCategory((current) => current === editingCategory ? nextName : current)
       setProductDraft((current) => current.category === editingCategory ? { ...current, category: nextName } : current)
       setEditingCategory(null)
       setCategoryDraft('')
+      setCategoryPartsDraft('0')
       flash('Categoría actualizada.')
     } catch (saveError) { setError(saveError.message) } finally { setBusyCategory(null) }
   }
@@ -672,8 +675,9 @@ function PartnerDashboard({ token, user, onSignOut }) {
   }
 
   function startEditingCategory(category) {
-    setEditingCategory(category)
-    setCategoryDraft(category)
+    setEditingCategory(category.name)
+    setCategoryDraft(category.name)
+    setCategoryPartsDraft(String(category.fractionalParts || 0))
     setIsCreatingCategory(false)
   }
 
@@ -839,7 +843,7 @@ function PartnerDashboard({ token, user, onSignOut }) {
           onAuthenticate={() => {}}
           onSignOut={() => {}}
           isPreview
-          previewData={{ business, products, rewards, addons: categoryAddons, promoVideos: business.promoVideos || [] }}
+          previewData={{ business, products, rewards, addons: categoryAddons, categories, promoVideos: business.promoVideos || [] }}
         />}
 
         {section === 'products' && (selectedCategory ? <section className={styles.categoryDetail}>
@@ -933,15 +937,21 @@ function PartnerDashboard({ token, user, onSignOut }) {
                 {editingCategory === category.name ? <form className={styles.categoryEditForm} onSubmit={saveCategory}>
                   <label className={styles.fieldLabel} htmlFor={`edit-category-${category.name}`}>Nombre de la categoría</label>
                   <input className={styles.textInput} id={`edit-category-${category.name}`} maxLength={60} value={categoryDraft} onChange={(event) => setCategoryDraft(event.target.value)} autoFocus required />
-                  <div className={styles.formActions}><button className={styles.primaryButton} type="submit" disabled={busyCategory === category.name}>Guardar</button><button className={styles.textButton} type="button" onClick={() => { setEditingCategory(null); setCategoryDraft('') }}>Cancelar</button></div>
+                  <label className={styles.fieldLabel} htmlFor={`edit-category-parts-${category.name}`}>¿Cómo se venden los productos de esta categoría?</label>
+                  <select className={styles.textInput} id={`edit-category-parts-${category.name}`} value={categoryPartsDraft} onChange={(event) => setCategoryPartsDraft(event.target.value)}>
+                    <option value="0">Venta tradicional: agregar un producto por vez</option>
+                    {Array.from({ length: 11 }, (_, index) => index + 2).map((count) => <option key={count} value={count}>Combinable: elegir {count} partes (productos) de esta categoría</option>)}
+                  </select>
+                  {Number(categoryPartsDraft) > 0 && <small className={styles.addonRuleHelp}>El cliente elegirá {categoryPartsDraft} productos y se sumarán sus precios. Poné en cada producto el precio de una parte.</small>}
+                  <div className={styles.formActions}><button className={styles.primaryButton} type="submit" disabled={busyCategory === category.name}>Guardar</button><button className={styles.textButton} type="button" onClick={() => { setEditingCategory(null); setCategoryDraft(''); setCategoryPartsDraft('0') }}>Cancelar</button></div>
                 </form> : <>
                   <button className={styles.categoryCardOpen} type="button" onClick={() => { setSelectedCategory(category.name); setProductDraft({ ...emptyProduct, category: category.name }); setEditingProductId(null) }}>
                     <span className={styles.categoryCover}>{coverProduct ? <img src={coverProduct.imageDataUrl} alt="" style={{ '--image-scale': coverProduct.imageScale || 1, '--image-position-x': `${coverProduct.imagePositionX ?? 50}%`, '--image-position-y': `${coverProduct.imagePositionY ?? 50}%` }} /> : <FolderOpen size={30} />}</span>
-                    <span className={styles.categoryCardInfo}><strong>{category.name}</strong><small>{productCount} {productCount === 1 ? 'producto' : 'productos'}</small></span>
+                    <span className={styles.categoryCardInfo}><strong>{category.name}</strong><small>{Number(category.fractionalParts) > 0 ? `${productCount} opciones · requiere ${category.fractionalParts} partes` : `${productCount} ${productCount === 1 ? 'producto' : 'productos'}`}</small></span>
                     <ChevronRight size={18} />
                   </button>
                   <div className={styles.categoryCardActions}>
-                    <button className={styles.iconButton} type="button" title="Editar categoría" aria-label={`Editar categoría ${category.name}`} onClick={() => startEditingCategory(category.name)}><Pencil size={16} /></button>
+                    <button className={styles.iconButton} type="button" title="Editar categoría" aria-label={`Editar categoría ${category.name}`} onClick={() => startEditingCategory(category)}><Pencil size={16} /></button>
                     <button className={styles.deleteButton} type="button" title="Eliminar categoría" aria-label={`Eliminar categoría ${category.name}`} onClick={() => removeCategory(category.name)}><Trash2 size={16} /></button>
                   </div>
                 </>}

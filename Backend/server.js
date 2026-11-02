@@ -132,9 +132,11 @@ async function initializeDatabase() {
       id BIGSERIAL PRIMARY KEY,
       business_id BIGINT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
       name VARCHAR(60) NOT NULL,
+      fractional_parts SMALLINT NOT NULL DEFAULT 0 CHECK (fractional_parts = 0 OR fractional_parts BETWEEN 2 AND 12),
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       UNIQUE (business_id, name)
     );
+    ALTER TABLE business_categories ADD COLUMN IF NOT EXISTS fractional_parts SMALLINT NOT NULL DEFAULT 0;
     CREATE TABLE IF NOT EXISTS business_category_addons (
       id BIGSERIAL PRIMARY KEY,
       business_id BIGINT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
@@ -830,7 +832,7 @@ app.get('/api/public/businesses/:slug', async (req, res, next) => {
     }
     delete business.subscriptionDueAt
     business.bonusPointsActiveToday = hasDoublePointsToday(business.plan, business.bonusPointsDays)
-    const [products, rewards, addons, bestSellers, promoVideos] = await Promise.all([
+    const [products, rewards, addons, bestSellers, promoVideos, categories] = await Promise.all([
       pool.query(
         `SELECT id, name, description, category, price,
           points_per_unit AS "pointsPerUnit", image_data_url AS "imageDataUrl",
@@ -867,8 +869,9 @@ app.get('/api/public/businesses/:slug', async (req, res, next) => {
         [business.id],
       ),
       pool.query('SELECT id, original_name AS name, size_bytes AS "sizeBytes" FROM business_videos WHERE business_id = $1 ORDER BY created_at, id', [business.id]),
+      pool.query('SELECT name, fractional_parts AS "fractionalParts" FROM business_categories WHERE business_id = $1 ORDER BY name', [business.id]),
     ])
-    res.json({ business, products: products.rows, rewards: rewards.rows, addons: addons.rows, promoVideos: promoVideos.rows, bestSellerIds: bestSellers.rows.map((row) => row.id) })
+    res.json({ business, products: products.rows, rewards: rewards.rows, addons: addons.rows, categories: categories.rows, promoVideos: promoVideos.rows, bestSellerIds: bestSellers.rows.map((row) => row.id) })
   } catch (error) {
     next(error)
   }
@@ -1534,7 +1537,7 @@ app.patch('/api/partner/business/options', authenticate, requirePartner, async (
 app.get('/api/partner/categories', authenticate, requirePartner, async (req, res, next) => {
   try {
     const { rows } = await pool.query(
-      `SELECT categories.name, COUNT(products.id)::int AS "productCount"
+      `SELECT categories.name, categories.fractional_parts AS "fractionalParts", COUNT(products.id)::int AS "productCount"
        FROM business_categories AS categories
        LEFT JOIN business_products AS products
          ON products.business_id = categories.business_id
@@ -1555,7 +1558,7 @@ app.post('/api/partner/categories', authenticate, requirePartner, async (req, re
   if (!name || name.length > 60) return res.status(400).json({ error: 'Ingresá un nombre de categoría válido.' })
   try {
     const { rows } = await pool.query(
-      'INSERT INTO business_categories (business_id, name) VALUES ($1, $2) RETURNING name',
+      'INSERT INTO business_categories (business_id, name) VALUES ($1, $2) RETURNING name, fractional_parts AS "fractionalParts"',
       [req.businessId, name],
     )
     res.status(201).json({ category: { ...rows[0], productCount: 0 } })
@@ -1568,10 +1571,12 @@ app.post('/api/partner/categories', authenticate, requirePartner, async (req, re
 app.patch('/api/partner/categories', authenticate, requirePartner, async (req, res, next) => {
   const currentName = typeof req.body?.currentName === 'string' ? req.body.currentName.trim() : ''
   const name = typeof req.body?.name === 'string' ? req.body.name.trim() : ''
-  if (!currentName || currentName.length > 60 || !name || name.length > 60) {
+  const fractionalParts = req.body?.fractionalParts == null ? null : Number(req.body.fractionalParts)
+  if (!currentName || currentName.length > 60 || !name || name.length > 60
+    || (fractionalParts !== null && (!Number.isInteger(fractionalParts) || (fractionalParts !== 0 && (fractionalParts < 2 || fractionalParts > 12))))) {
     return res.status(400).json({ error: 'Ingresá un nombre de categoría válido.' })
   }
-  if (currentName === name) return res.json({ category: { name } })
+  if (currentName === name && fractionalParts === null) return res.json({ category: { name } })
 
   const client = await pool.connect()
   let transactionStarted = false
@@ -1579,7 +1584,7 @@ app.patch('/api/partner/categories', authenticate, requirePartner, async (req, r
     await client.query('BEGIN')
     transactionStarted = true
     const { rows } = await client.query(
-      'SELECT id FROM business_categories WHERE business_id = $1 AND name = $2 FOR UPDATE',
+      'SELECT id, fractional_parts AS "fractionalParts" FROM business_categories WHERE business_id = $1 AND name = $2 FOR UPDATE',
       [req.businessId, currentName],
     )
     if (!rows[0]) {
@@ -1587,14 +1592,16 @@ app.patch('/api/partner/categories', authenticate, requirePartner, async (req, r
       transactionStarted = false
       return res.status(404).json({ error: 'No se encontró esa categoría.' })
     }
-    await client.query('UPDATE business_categories SET name = $1 WHERE id = $2', [name, rows[0].id])
-    await client.query(
-      'UPDATE business_products SET category = $1 WHERE business_id = $2 AND category = $3',
-      [name, req.businessId, currentName],
-    )
+    await client.query('UPDATE business_categories SET name = $1, fractional_parts = COALESCE($2, fractional_parts) WHERE id = $3', [name, fractionalParts, rows[0].id])
+    if (currentName !== name) {
+      await client.query(
+        'UPDATE business_products SET category = $1 WHERE business_id = $2 AND category = $3',
+        [name, req.businessId, currentName],
+      )
+    }
     await client.query('COMMIT')
     transactionStarted = false
-    res.json({ category: { name } })
+    res.json({ category: { name, fractionalParts: fractionalParts ?? rows[0].fractionalParts } })
   } catch (error) {
     if (transactionStarted) await client.query('ROLLBACK')
     if (error.code === '23505') return res.status(409).json({ error: 'Ya existe una categoría con ese nombre.' })
@@ -2561,7 +2568,10 @@ app.post('/api/orders', authenticate, requireCustomer, async (req, res, next) =>
     const addonIds = requestedItem?.addonIds ?? []
     if (!Array.isArray(addonIds) || addonIds.length > 12
       || addonIds.some((id) => !Number.isSafeInteger(Number(id)) || Number(id) < 1)
-      || new Set(addonIds.map(String)).size !== addonIds.length) {
+      || new Set(addonIds.map(String)).size !== addonIds.length
+      || (requestedItem?.partProductIds != null && (!Array.isArray(requestedItem.partProductIds)
+        || requestedItem.partProductIds.length < 2 || requestedItem.partProductIds.length > 12
+        || requestedItem.partProductIds.some((id) => !Number.isSafeInteger(Number(id)) || Number(id) < 1)))) {
       return res.status(400).json({ error: 'La selección de agregados no es válida.' })
     }
     requestedAddonIds.push(...addonIds.map(Number))
@@ -2624,7 +2634,7 @@ app.post('/api/orders', authenticate, requireCustomer, async (req, res, next) =>
       referralEnabled = businesses[0].referralEnabled
       referralPoints = businesses[0].referralPoints
       const { rows: products } = await pool.query(
-        `SELECT p.id, p.name, p.description, p.category, c.id AS "categoryId", p.price, p.points_per_unit AS "pointsPerUnit"
+        `SELECT p.id, p.name, p.description, p.category, c.id AS "categoryId", c.fractional_parts AS "fractionalParts", p.price, p.points_per_unit AS "pointsPerUnit"
          FROM business_products p JOIN business_categories c ON c.business_id = p.business_id AND c.name = p.category
          WHERE p.business_id = $1 AND p.is_available = TRUE`,
         [businessId],
@@ -2670,6 +2680,20 @@ app.post('/api/orders', authenticate, requireCustomer, async (req, res, next) =>
     if (!product || !Number.isInteger(quantity) || quantity < 1 || quantity > 99) {
       return res.status(400).json({ error: 'Hay productos o cantidades inválidas en el pedido.' })
     }
+    const partProductIds = requestedItem.partProductIds
+    let partProducts = []
+    if (Number(product.fractionalParts || 0) > 0) {
+      if (!Array.isArray(partProductIds) || partProductIds.length !== Number(product.fractionalParts)) {
+        return res.status(400).json({ error: `Elegí exactamente ${product.fractionalParts} partes para armar este producto.` })
+      }
+      partProducts = partProductIds.map((id) => productById.get(String(id)))
+      if (partProducts.some((part) => !part || String(part.categoryId) !== String(product.categoryId))
+        || String(partProducts[0]?.id) !== String(product.id)) {
+        return res.status(400).json({ error: 'Las partes deben ser productos disponibles de la misma categoría.' })
+      }
+    } else if (partProductIds != null) {
+      return res.status(400).json({ error: 'Esta categoría vende productos por separado.' })
+    }
     const selectedAddons = (requestedItem.addonIds || []).map((id) => addonById.get(String(id)))
     if (selectedAddons.some((addon) => !addon || addon.category !== product.category
       || (addon.productId !== null && String(addon.productId) !== String(product.id)))) {
@@ -2682,7 +2706,7 @@ app.post('/api/orders', authenticate, requireCustomer, async (req, res, next) =>
       if (selectedSingleGroups.has(groupKey)) return res.status(400).json({ error: 'ElegÃ­ una sola opciÃ³n por grupo.' })
       selectedSingleGroups.add(groupKey)
     }
-    const requiredGroups = businessId
+    const requiredGroups = businessId && Number(product.fractionalParts || 0) === 0
       ? [...(requiredTwoGroupsByProduct.get(`category:${product.categoryId}`) || []), ...(requiredTwoGroupsByProduct.get(`product:${product.id}`) || [])]
       : []
     for (const group of requiredGroups) {
@@ -2692,15 +2716,18 @@ app.post('/api/orders', authenticate, requireCustomer, async (req, res, next) =>
       if (selectedCount !== 2) return res.status(400).json({ error: 'Elegí exactamente dos opciones para este producto.' })
     }
     const addonTotal = selectedAddons.reduce((sum, addon) => sum + addon.price, 0)
+    const partsPrice = partProducts.length ? partProducts.reduce((sum, part) => sum + part.price, 0) : product.price
+    const partsPoints = partProducts.length ? partProducts.reduce((sum, part) => sum + (part.pointsPerUnit || 0), 0) : (product.pointsPerUnit || 0)
     items.push({
       id: product.id,
-      name: product.name,
+      name: partProducts.length ? `${product.category}: ${partProducts.map((part) => part.name).join(' + ')}` : product.name,
       category: product.category,
       quantity,
-      unitPrice: product.price + addonTotal,
-      baseUnitPrice: product.price,
+      unitPrice: partsPrice + addonTotal,
+      baseUnitPrice: partsPrice,
+      ...(partProducts.length ? { partProducts: partProducts.map(({ id, name, price }) => ({ id, name, price })) } : {}),
       addOns: selectedAddons.map(({ id, name, price, groupName, productId }) => ({ id, name, price, groupName, productId })),
-      pointsPerUnit: product.pointsPerUnit || 0,
+      pointsPerUnit: partsPoints,
     })
   }
 

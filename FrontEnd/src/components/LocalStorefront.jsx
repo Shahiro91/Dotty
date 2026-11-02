@@ -79,6 +79,7 @@ function LocalStorefront({ slug, session, onAuthenticate, onSignOut, isPreview =
   const orderTrackingStorageKey = `sabor-vivo-order-${slug}-${session?.user?.id || 'guest'}`
   const [storeData, setStoreData] = useState(previewData)
   const [cart, setCart] = useState([])
+  const [fractionalSelections, setFractionalSelections] = useState([])
   const [customizingProduct, setCustomizingProduct] = useState(null)
   const [selectedAddonIds, setSelectedAddonIds] = useState([])
   const [isAuthOpen, setIsAuthOpen] = useState(false)
@@ -179,6 +180,7 @@ function LocalStorefront({ slug, session, onAuthenticate, onSignOut, isPreview =
   const currentPromoVideoIndex = promoVideos.length ? activePromoVideoIndex % promoVideos.length : 0
   useEffect(() => { setActivePromoVideoIndex(0) }, [business?.slug, promoVideos.map((video) => video.id).join('|')])
   const products = storeData?.products || []
+  const categories = storeData?.categories || []
   const categoryAddons = storeData?.addons || []
   const rewards = storeData?.rewards || []
   const bestSellerIds = new Set(storeData?.bestSellerIds || [])
@@ -188,9 +190,16 @@ function LocalStorefront({ slug, session, onAuthenticate, onSignOut, isPreview =
   const addonsEnabled = business?.addonsEnabled !== false
   const currentTab = categoryNames.includes(activeCategory) ? activeCategory : categoryNames[0]
   const visibleProducts = products.filter((product) => product.category === currentTab)
+  const currentCategory = categories.find((category) => category.name === currentTab)
+  const fractionalParts = Number(currentCategory?.fractionalParts || 0)
+  const currentFractionalSelections = fractionalSelections.filter((part) => part.category === currentTab)
   const orderedBestSellers = [...bestSellers].sort((a, b) => (storeData.bestSellerIds.indexOf(a.id) - storeData.bestSellerIds.indexOf(b.id)))
 
   function renderProduct(product) {
+    const productCategory = categories.find((category) => category.name === product.category)
+    const productFractionalParts = Number(productCategory?.fractionalParts || 0)
+    const selectedPartsForProductCategory = fractionalSelections.filter((part) => part.category === product.category).length
+    const selectedProductParts = fractionalSelections.filter((part) => String(part.id) === String(product.id)).length
     const productAddons = addonsEnabled ? categoryAddons.filter((addon) => addon.category === product.category && (addon.productId == null || String(addon.productId) === String(product.id))) : []
     const productCartItems = cart.filter((item) => String(item.id) === String(product.id))
     const productCartCount = productCartItems.reduce((sum, item) => sum + item.quantity, 0)
@@ -200,12 +209,47 @@ function LocalStorefront({ slug, session, onAuthenticate, onSignOut, isPreview =
       <div className={styles.productInfo}>
         <span className={styles.category}>{product.category}{bestSellerIds.has(product.id) && <em className={styles.bestSellerBadge}><Flame size={11} /> Más vendido</em>}</span><h3>{product.name}</h3>
         <p>{product.description}</p>
-        <div className={styles.productBottom}><strong>{currency.format(product.price)}</strong><span><Award size={14} /> +{product.pointsPerUnit * pointsMultiplier} pts</span></div>
-        {productAddons.length > 0
+        <div className={styles.productBottom}><strong>{currency.format(product.price)}{productFractionalParts > 0 && <small> / parte</small>}</strong><span><Award size={14} /> +{product.pointsPerUnit * pointsMultiplier} pts</span></div>
+        {productFractionalParts > 0
+          ? <button className={styles.addButton} type="button" disabled={isPreview || selectedPartsForProductCategory >= productFractionalParts} onClick={() => { setActiveCategory(product.category); setFractionalSelections((current) => current.length && current[0].category !== product.category ? [product] : [...current, product]) }}>{selectedProductParts ? `Agregar otra parte · ${selectedProductParts} elegida${selectedProductParts > 1 ? 's' : ''}` : 'Elegir esta parte'} <Plus size={15} /></button>
+          : productAddons.length > 0
           ? <button className={styles.addButton} type="button" disabled={isPreview} onClick={() => openProductCustomizer(product)}>{productCartCount ? `Personalizar · ${productCartCount} en pedido` : 'Personalizar'} <Plus size={15} /></button>
           : cartItem ? <div className={styles.quantity}><button type="button" aria-label={`Quitar una unidad de ${product.name}`} onClick={() => changeQuantity(product, -1)}><Minus size={15} /></button><span>{cartItem.quantity}</span><button type="button" aria-label={`Agregar una unidad de ${product.name}`} onClick={() => changeQuantity(product, 1)}><Plus size={15} /></button></div> : <button className={styles.addButton} type="button" disabled={isPreview} onClick={() => changeQuantity(product, 1)}>Agregar <Plus size={15} /></button>}
       </div>
     </article>
+  }
+
+  function removeFractionalPart(index) {
+    setFractionalSelections((current) => current.filter((_, partIndex) => partIndex !== index))
+  }
+
+  function addFractionalCombination() {
+    if (!currentCategory || fractionalParts < 2 || currentFractionalSelections.length !== fractionalParts) return
+    const selected = currentFractionalSelections
+    const partProductIds = selected.map((part) => part.id)
+    const sortedIds = [...partProductIds].map(String).sort()
+    const cartKey = `fractional:${currentCategory.name}:${sortedIds.join(':')}`
+    const totalPrice = selected.reduce((sum, part) => sum + Number(part.price), 0)
+    const totalPoints = selected.reduce((sum, part) => sum + Number(part.pointsPerUnit || 0), 0)
+    const combinedItem = {
+      ...selected[0],
+      name: `${currentCategory.name}: ${selected.map((part) => part.name).join(' + ')}`,
+      price: totalPrice,
+      basePrice: totalPrice,
+      pointsPerUnit: totalPoints,
+      partProductIds,
+      partNames: selected.map((part) => part.name),
+      selectedAddOns: [],
+      cartKey,
+    }
+    setCart((current) => {
+      const existing = current.find((item) => item.cartKey === cartKey)
+      return existing
+        ? current.map((item) => item.cartKey === cartKey ? { ...item, quantity: item.quantity + 1 } : item)
+        : [...current, { ...combinedItem, quantity: 1 }]
+    })
+    setFractionalSelections([])
+    setIsCartOpen(true)
   }
   const cartTotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0)
   const selectedReward = rewards.find((reward) => String(reward.id) === String(selectedRewardId))
@@ -255,7 +299,7 @@ function LocalStorefront({ slug, session, onAuthenticate, onSignOut, isPreview =
     .reduce((sum, addon) => sum + Number(addon.price), 0)
 
   function changeQuantity(product, amount, addOns = product.selectedAddOns || []) {
-    const cartKey = `${product.id}:${addOns.map((addon) => String(addon.id)).sort().join(',')}`
+    const cartKey = product.cartKey || `${product.id}:${addOns.map((addon) => String(addon.id)).sort().join(',')}`
     const addOnTotal = addOns.reduce((sum, addon) => sum + Number(addon.price), 0)
     setCart((current) => {
       const existing = current.find((item) => item.cartKey === cartKey)
@@ -308,7 +352,7 @@ function LocalStorefront({ slug, session, onAuthenticate, onSignOut, isPreview =
         token: session.token,
         body: {
           businessSlug: business.slug,
-          items: cart.map((item) => ({ id: item.id, quantity: item.quantity, addonIds: (item.selectedAddOns || []).map((addon) => addon.id) })),
+          items: cart.map((item) => ({ id: item.id, quantity: item.quantity, addonIds: (item.selectedAddOns || []).map((addon) => addon.id), ...(item.partProductIds ? { partProductIds: item.partProductIds } : {}) })),
           discountRewardId: selectedDiscountReward?.id ?? null,
           productRewardId: selectedProductReward?.id ?? null,
           deliveryAddress,
@@ -461,8 +505,14 @@ function LocalStorefront({ slug, session, onAuthenticate, onSignOut, isPreview =
           {products.length > 0 && <>
             <div className={styles.sectionHead}><div><span className={styles.eyebrow}>El menú</span><h2>Productos</h2></div><span>{visibleProducts.length} opciones</span></div>
             <nav className={styles.categoryTabs} aria-label="Categorías">
-              {categoryNames.map((name) => <button type="button" key={name} className={currentTab === name ? styles.categoryTabActive : ''} aria-pressed={currentTab === name} onClick={() => setActiveCategory(name)}>{name}</button>)}
+              {categoryNames.map((name) => { const requiredParts = Number(categories.find((category) => category.name === name)?.fractionalParts || 0); return <button type="button" key={name} className={currentTab === name ? styles.categoryTabActive : ''} aria-pressed={currentTab === name} onClick={() => setActiveCategory(name)}>{name}{requiredParts > 0 ? ` · ${requiredParts} partes` : ''}</button> })}
             </nav>
+            {fractionalParts > 0 && <section className={styles.fractionalBuilder} aria-label="Armar producto combinable">
+              <div><strong>Armá tu producto</strong><p>Elegí {fractionalParts} partes. Se suman los precios de cada una.</p></div>
+              <span className={styles.fractionalProgress}>{fractionalSelections.filter((part) => part.category === currentTab).length} / {fractionalParts} elegidas</span>
+              {currentFractionalSelections.length > 0 && <ol className={styles.fractionalPartList}>{currentFractionalSelections.map((part, index) => <li key={`${part.id}-${index}`}><span>{part.name} · {currency.format(part.price)}</span><button type="button" aria-label={`Quitar ${part.name}`} onClick={() => removeFractionalPart(fractionalSelections.indexOf(part))}><X size={14} /></button></li>)}</ol>}
+              <div className={styles.fractionalBuilderFooter}><strong>Total: {currency.format(currentFractionalSelections.reduce((sum, part) => sum + Number(part.price), 0))}</strong><button className={styles.addButton} type="button" disabled={isPreview || currentFractionalSelections.length !== fractionalParts} onClick={addFractionalCombination}>Agregar combinación <Plus size={15} /></button></div>
+            </section>}
             <div className={styles.productGrid}>{visibleProducts.map(renderProduct)}</div>
           </>}
 
