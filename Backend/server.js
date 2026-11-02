@@ -72,6 +72,15 @@ async function initializeDatabase() {
     ALTER TABLE businesses ADD COLUMN IF NOT EXISTS pending_plan VARCHAR(20) CHECK (pending_plan IN ('basic', 'vip'));
     UPDATE businesses SET plan = pending_plan, pending_plan = NULL WHERE pending_plan IS NOT NULL;
     ALTER TABLE businesses ALTER COLUMN opening_hours TYPE TEXT;
+    CREATE TABLE IF NOT EXISTS business_videos (
+      id BIGSERIAL PRIMARY KEY,
+      business_id BIGINT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+      original_name VARCHAR(200) NOT NULL,
+      mime_type VARCHAR(40) NOT NULL,
+      size_bytes INTEGER NOT NULL CHECK (size_bytes > 0),
+      video_data BYTEA NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
     CREATE TABLE IF NOT EXISTS subscription_payments (
       id BIGSERIAL PRIMARY KEY,
       business_id BIGINT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
@@ -698,6 +707,98 @@ app.get('/api/health', async (_req, res) => {
   res.json({ status: 'ok' })
 })
 
+app.get('/api/public/businesses/:slug/videos/:videoId', async (req, res, next) => {
+  const videoId = Number(req.params.videoId)
+  if (!Number.isSafeInteger(videoId) || videoId < 1) return res.sendStatus(404)
+  try {
+    const { rows } = await pool.query(
+      `SELECT v.mime_type AS "mimeType", v.video_data AS data, v.size_bytes AS size
+       FROM business_videos v JOIN businesses b ON b.id = v.business_id
+       WHERE b.slug = $1 AND v.id = $2`,
+      [req.params.slug, videoId],
+    )
+    if (!rows[0]) return res.sendStatus(404)
+    const { data, mimeType, size } = rows[0]
+    const range = req.headers.range
+    let start = 0
+    let end = size - 1
+    let status = 200
+    if (range) {
+      const match = /^bytes=(\d*)-(\d*)$/.exec(range)
+      if (!match || (!match[1] && !match[2])) {
+        res.set('Content-Range', `bytes */${size}`)
+        return res.sendStatus(416)
+      }
+      if (!match[1]) start = Math.max(0, size - Number(match[2]))
+      else start = Number(match[1])
+      if (match[1] && match[2]) end = Math.min(size - 1, Number(match[2]))
+      if (start >= size || end < start) {
+        res.set('Content-Range', `bytes */${size}`)
+        return res.sendStatus(416)
+      }
+      status = 206
+    }
+    const chunk = data.subarray(start, end + 1)
+    res.status(status).set({
+      'Accept-Ranges': 'bytes',
+      'Cache-Control': 'public, max-age=3600',
+      'Content-Length': String(chunk.length),
+      'Content-Type': mimeType,
+      'X-Content-Type-Options': 'nosniff',
+      ...(status === 206 ? { 'Content-Range': `bytes ${start}-${end}/${size}` } : {}),
+    }).send(chunk)
+  } catch (error) { next(error) }
+})
+
+app.post('/api/partner/business/videos', authenticate, requirePartner, express.raw({
+  type: ['video/mp4', 'video/webm', 'video/quicktime'],
+  limit: 30 * 1024 * 1024,
+}), async (req, res, next) => {
+  const video = req.body
+  if (!Buffer.isBuffer(video) || video.length === 0) return res.status(400).json({ error: 'Elegí un archivo de video válido.' })
+  let originalName = 'video'
+  try { originalName = decodeURIComponent(req.get('x-file-name') || 'video').split(/[\\/]/).pop().slice(0, 200) || 'video' } catch {}
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    const { rowCount } = await client.query('SELECT id FROM businesses WHERE id = $1 FOR UPDATE', [req.businessId])
+    if (!rowCount) {
+      await client.query('ROLLBACK')
+      return res.status(404).json({ error: 'No encontramos el local.' })
+    }
+    const { rows: usage } = await client.query('SELECT COUNT(*)::int AS count, COALESCE(SUM(size_bytes), 0)::int AS bytes FROM business_videos WHERE business_id = $1', [req.businessId])
+    if (usage[0].count >= 5) {
+      await client.query('ROLLBACK')
+      return res.status(400).json({ error: 'Podés guardar hasta 5 videos en el carrusel.' })
+    }
+    if (usage[0].bytes + video.length > 90 * 1024 * 1024) {
+      await client.query('ROLLBACK')
+      return res.status(400).json({ error: 'El espacio total de videos del local no puede superar 90 MB.' })
+    }
+    const { rows } = await client.query(
+      `INSERT INTO business_videos (business_id, original_name, mime_type, size_bytes, video_data)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, original_name AS name, size_bytes AS "sizeBytes"`,
+      [req.businessId, originalName, req.get('content-type'), video.length, video],
+    )
+    await client.query('COMMIT')
+    res.status(201).json({ video: rows[0] })
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => {})
+    next(error)
+  } finally { client.release() }
+})
+
+app.delete('/api/partner/business/videos/:videoId', authenticate, requirePartner, async (req, res, next) => {
+  const videoId = Number(req.params.videoId)
+  if (!Number.isSafeInteger(videoId) || videoId < 1) return res.status(400).json({ error: 'El video no es válido.' })
+  try {
+    const { rowCount } = await pool.query('DELETE FROM business_videos WHERE id = $1 AND business_id = $2', [videoId, req.businessId])
+    if (!rowCount) return res.status(404).json({ error: 'No encontramos ese video.' })
+    res.sendStatus(204)
+  } catch (error) { next(error) }
+})
+
 app.get('/api/public/businesses/:slug', async (req, res, next) => {
   try {
     const { rows: businesses } = await pool.query(
@@ -719,7 +820,7 @@ app.get('/api/public/businesses/:slug', async (req, res, next) => {
     }
     delete business.subscriptionDueAt
     business.bonusPointsActiveToday = hasDoublePointsToday(business.plan, business.bonusPointsDays)
-    const [products, rewards, addons, bestSellers] = await Promise.all([
+    const [products, rewards, addons, bestSellers, promoVideos] = await Promise.all([
       pool.query(
         `SELECT id, name, description, category, price,
           points_per_unit AS "pointsPerUnit", image_data_url AS "imageDataUrl",
@@ -754,8 +855,9 @@ app.get('/api/public/businesses/:slug', async (req, res, next) => {
          GROUP BY bp.id ORDER BY SUM((line.value->>'quantity')::int) DESC, bp.name LIMIT 6`,
         [business.id],
       ),
+      pool.query('SELECT id, original_name AS name, size_bytes AS "sizeBytes" FROM business_videos WHERE business_id = $1 ORDER BY created_at, id', [business.id]),
     ])
-    res.json({ business, products: products.rows, rewards: rewards.rows, addons: addons.rows, bestSellerIds: bestSellers.rows.map((row) => row.id) })
+    res.json({ business, products: products.rows, rewards: rewards.rows, addons: addons.rows, promoVideos: promoVideos.rows, bestSellerIds: bestSellers.rows.map((row) => row.id) })
   } catch (error) {
     next(error)
   }
@@ -1190,6 +1292,8 @@ app.get('/api/partner/overview', authenticate, requirePartnerBilling, async (req
     )
     if (!rows[0]) return res.status(404).json({ error: 'No se encontró el local asociado.' })
     const business = rows[0]
+    const { rows: promoVideos } = await pool.query('SELECT id, original_name AS name, size_bytes AS "sizeBytes" FROM business_videos WHERE business_id = $1 ORDER BY created_at, id', [req.businessId])
+    business.promoVideos = promoVideos
     const billing = await loadBilling(req.businessId)
     delete business.subscriptionDueAt
     business.bonusPointsActiveToday = hasDoublePointsToday(business.plan, business.bonusPointsDays)

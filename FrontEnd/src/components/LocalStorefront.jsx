@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { ArrowRight, Award, Clock3, Flame, Gift, LoaderCircle, LogIn, MapPin, MessageCircle, Minus, Plus, Printer, ShoppingBag, Store, X } from 'lucide-react'
-import { apiRequest } from '../lib/api.js'
+import { apiRequest, apiUrl } from '../lib/api.js'
 import { getBusinessFontVariables } from '../lib/businessStyle.js'
 import { currency } from '../data/menu.js'
 import AuthModal from './AuthModal.jsx'
@@ -100,6 +100,7 @@ function LocalStorefront({ slug, session, onAuthenticate, onSignOut, isPreview =
   const [paymentMethod, setPaymentMethod] = useState('')
   const [customerNotes, setCustomerNotes] = useState('')
   const [activeCategory, setActiveCategory] = useState(null)
+  const [activePromoVideoIndex, setActivePromoVideoIndex] = useState(0)
   const [referralCode, setReferralCode] = useState('')
   const [referralCopied, setReferralCopied] = useState(false)
   const referralStorageKey = `sabor-vivo-ref-${slug}`
@@ -174,6 +175,9 @@ function LocalStorefront({ slug, session, onAuthenticate, onSignOut, isPreview =
   }, [isPreview, previewData, slug])
 
   const business = storeData?.business
+  const promoVideos = storeData?.promoVideos || []
+  const currentPromoVideoIndex = promoVideos.length ? activePromoVideoIndex % promoVideos.length : 0
+  useEffect(() => { setActivePromoVideoIndex(0) }, [business?.slug, promoVideos.map((video) => video.id).join('|')])
   const products = storeData?.products || []
   const categoryAddons = storeData?.addons || []
   const rewards = storeData?.rewards || []
@@ -412,6 +416,19 @@ function LocalStorefront({ slug, session, onAuthenticate, onSignOut, isPreview =
             <small>Te faltan {nextReward.pointsCost - userPoints} puntos</small>
           </div>
           : rewards.length > 0 && <div className={styles.goal}><div className={styles.goalText}><span>¡Ya podés canjear cualquier recompensa!</span></div><div className={styles.goalBar}><span style={{ width: '100%' }} /></div></div>}
+      </section>}
+
+      {promoVideos.length > 0 && <section className={styles.promoVideos} aria-label="Videos del local">
+        <div className={styles.promoVideoFrame}>
+          <video key={promoVideos[currentPromoVideoIndex].id} className={styles.promoVideo} src={apiUrl(`/public/businesses/${encodeURIComponent(slug)}/videos/${promoVideos[currentPromoVideoIndex].id}`)} controls autoPlay muted playsInline preload="metadata" onEnded={() => setActivePromoVideoIndex((current) => (current + 1) % promoVideos.length)} />
+        </div>
+        {promoVideos.length > 1 && <div className={styles.promoVideoControls}>
+          <button type="button" onClick={() => setActivePromoVideoIndex((current) => (current - 1 + promoVideos.length) % promoVideos.length)}>Anterior</button>
+          <div className={styles.promoVideoDots} aria-label={`Video ${currentPromoVideoIndex + 1} de ${promoVideos.length}`}>
+            {promoVideos.map((video, index) => <button key={video.id} type="button" className={index === currentPromoVideoIndex ? styles.promoVideoDotActive : ''} aria-label={`Mostrar video ${index + 1}`} aria-current={index === currentPromoVideoIndex ? 'true' : undefined} onClick={() => setActivePromoVideoIndex(index)} />)}
+          </div>
+          <button type="button" onClick={() => setActivePromoVideoIndex((current) => (current + 1) % promoVideos.length)}>Siguiente</button>
+        </div>}
       </section>}
 
       {business.referralEnabled && Number(business.referralPoints) > 0 && <section className={styles.referralBanner} aria-label="Invitá a un amigo">

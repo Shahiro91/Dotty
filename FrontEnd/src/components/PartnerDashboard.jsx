@@ -156,6 +156,7 @@ function PartnerDashboard({ token, user, onSignOut }) {
   const [editingRewardId, setEditingRewardId] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const [isUploadingVideo, setIsUploadingVideo] = useState(false)
   const [busyCategory, setBusyCategory] = useState(null)
   const [busyOrderId, setBusyOrderId] = useState(null)
   const [message, setMessage] = useState('')
@@ -315,10 +316,42 @@ function PartnerDashboard({ token, user, onSignOut }) {
           addonsEnabled: business.addonsEnabled !== false,
         },
       })
-      setBusiness(result.business)
+      setBusiness((current) => ({ ...result.business, promoVideos: current.promoVideos || [] }))
       setOpeningHoursSchedule(parseOpeningSchedule(result.business.openingHours))
       flash('Perfil del local actualizado.')
     } catch (saveError) { setError(saveError.message) } finally { setIsSaving(false) }
+  }
+
+  async function uploadPromoVideo(event) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    if (!['video/mp4', 'video/webm', 'video/quicktime'].includes(file.type)) {
+      setError('Elegí un archivo MP4, WebM o MOV.')
+      return
+    }
+    if (file.size > 30 * 1024 * 1024) {
+      setError('Cada video puede ocupar hasta 30 MB.')
+      return
+    }
+    setIsUploadingVideo(true)
+    setError('')
+    try {
+      const result = await apiRequest('/partner/business/videos', {
+        method: 'POST', token, rawBody: file,
+        headers: { 'Content-Type': file.type, 'X-File-Name': encodeURIComponent(file.name) },
+      })
+      setBusiness((current) => ({ ...current, promoVideos: [...(current.promoVideos || []), result.video] }))
+      flash('Video agregado al carrusel.')
+    } catch (uploadError) { setError(uploadError.message) } finally { setIsUploadingVideo(false) }
+  }
+
+  async function removePromoVideo(videoId) {
+    try {
+      await apiRequest(`/partner/business/videos/${videoId}`, { method: 'DELETE', token })
+      setBusiness((current) => ({ ...current, promoVideos: (current.promoVideos || []).filter((video) => video.id !== videoId) }))
+      flash('Video quitado del carrusel.')
+    } catch (deleteError) { setError(deleteError.message) }
   }
 
   function toggleBonusDay(day) {
@@ -763,6 +796,11 @@ function PartnerDashboard({ token, user, onSignOut }) {
             <input className={styles.fileInput} id="business-banner" type="file" accept="image/*" onChange={(event) => selectImage(event, (image) => updateBusiness('bannerDataUrl', image))} />
             {!business.bannerDataUrl && <p className={styles.bannerRequired}>Subí una foto para poder guardar el perfil.</p>}
 
+            <label className={styles.fieldLabel} htmlFor="business-promo-video-file">Videos debajo de los puntos</label>
+            <input className={styles.fileInput} id="business-promo-video-file" type="file" accept="video/mp4,video/webm,video/quicktime" onChange={uploadPromoVideo} disabled={isUploadingVideo || (business.promoVideos || []).length >= 5} />
+            <small className={styles.logoHelp}>Subí hasta 5 videos MP4, WebM o MOV. Cada uno puede ocupar hasta 30 MB y el total del local hasta 90 MB. En celulares, el carrusel avanza al terminar cada video.</small>
+            {(business.promoVideos || []).length > 0 && <ul className={styles.promoVideoList}>{business.promoVideos.map((video) => <li key={video.id}><span>{video.name}<small>{(video.sizeBytes / 1024 / 1024).toFixed(1)} MB</small></span><button className={styles.textButton} type="button" onClick={() => removePromoVideo(video.id)}>Quitar</button></li>)}</ul>}
+            {isUploadingVideo && <small className={styles.logoHelp}>Subiendo video...</small>}
             <div className={styles.colorFields}>
               <div className={styles.colorField}>
                 <label className={styles.fieldLabel} htmlFor="business-primary-color">Color primario</label>
@@ -801,7 +839,7 @@ function PartnerDashboard({ token, user, onSignOut }) {
           onAuthenticate={() => {}}
           onSignOut={() => {}}
           isPreview
-          previewData={{ business, products, rewards, addons: categoryAddons }}
+          previewData={{ business, products, rewards, addons: categoryAddons, promoVideos: business.promoVideos || [] }}
         />}
 
         {section === 'products' && (selectedCategory ? <section className={styles.categoryDetail}>
@@ -910,15 +948,15 @@ function PartnerDashboard({ token, user, onSignOut }) {
         {section === 'rewards' && <div className={styles.managementGrid}>
           <form className={styles.formSection} onSubmit={saveReward}>
             <div className={styles.sectionHeading}><h2>{editingRewardId ? 'Editar canje' : 'Nuevo canje'}</h2><p>Define qué recompensa pueden obtener los clientes con puntos.</p></div>
-            <label className={styles.fieldLabel} htmlFor="reward-type">Tipo de canje</label><select className={styles.textInput} id="reward-type" value={rewardDraft.rewardType || 'product'} onChange={(event) => setRewardDraft({ ...rewardDraft, rewardType: event.target.value, category: '', productId: '', discountValue: '' })}><option value="product">Producto</option><option value="discount">Descuento sobre una compra</option></select>
+            <label className={styles.fieldLabel} htmlFor="reward-type">Tipo de canje</label><select className={styles.textInput} id="reward-type" value={rewardDraft.rewardType || 'product'} onChange={(event) => setRewardDraft({ ...rewardDraft, rewardType: event.target.value, category: '', productId: '', imageDataUrl: '', discountValue: '' })}><option value="product">Producto</option><option value="discount">Descuento sobre una compra</option></select>
             {rewardDraft.rewardType === 'product' && <>
               <label className={styles.fieldLabel} htmlFor="reward-category">Categoría del producto</label>
-              <select className={styles.textInput} id="reward-category" value={rewardDraft.category || ''} onChange={(event) => setRewardDraft({ ...rewardDraft, category: event.target.value, productId: '' })} required>
+              <select className={styles.textInput} id="reward-category" value={rewardDraft.category || ''} onChange={(event) => setRewardDraft({ ...rewardDraft, category: event.target.value, productId: '', imageDataUrl: '' })} required>
                 <option value="">Elegí una categoría</option>
                 {categories.map((category) => <option key={category.name} value={category.name}>{category.name}</option>)}
               </select>
               <label className={styles.fieldLabel} htmlFor="reward-product">Producto a canjear</label>
-              <select className={styles.textInput} id="reward-product" value={rewardDraft.productId || ''} onChange={(event) => setRewardDraft({ ...rewardDraft, productId: event.target.value })} required disabled={!rewardDraft.category}>
+              <select className={styles.textInput} id="reward-product" value={rewardDraft.productId || ''} onChange={(event) => { const product = products.find((item) => String(item.id) === event.target.value); setRewardDraft((current) => ({ ...current, productId: event.target.value, imageDataUrl: product?.imageDataUrl || '' })) }} required disabled={!rewardDraft.category}>
                 <option value="">Elegí un producto</option>
                 {products.filter((product) => product.category === rewardDraft.category).map((product) => <option key={product.id} value={product.id}>{product.name} · {currency.format(product.price)}</option>)}
               </select>

@@ -44,6 +44,14 @@
 .goalBar { height: 12px; overflow: hidden; border-radius: 99px; background: rgba(255, 255, 255, .28); }
 .goalBar span { display: block; height: 100%; border-radius: 99px; background: #fff; transition: width .5s ease; }
 .goal small { font-size: 11px; opacity: .85; }
+.promoVideos { width: min(900px, calc(100% - 40px)); margin: 16px auto 0; overflow: hidden; border: 1px solid #e7e3da; border-radius: 10px; background: #1f2522; }
+.promoVideoFrame { width: 100%; max-height: 440px; display: grid; place-items: center; }
+.promoVideo { width: 100%; max-height: 440px; display: block; background: #1f2522; object-fit: contain; }
+.promoVideoControls { min-height: 42px; padding: 4px 12px; display: flex; align-items: center; justify-content: space-between; gap: 12px; background: #fffefa; }
+.promoVideoControls > button { padding: 5px 8px; border: 0; background: transparent; color: var(--store-secondary); cursor: pointer; font: inherit; font-size: 11px; font-weight: 750; }
+.promoVideoDots { display: flex; align-items: center; gap: 7px; }
+.promoVideoDots button { width: 8px; height: 8px; padding: 0; border: 0; border-radius: 50%; background: #c9cec6; cursor: pointer; }
+.promoVideoDots button.promoVideoDotActive { background: var(--store-primary); transform: scale(1.25); }
 @media (max-width: 640px) { .pointsCard { flex-direction: column; align-items: stretch; gap: 14px; } .goal { width: 100%; } }
 .catalog { min-width: 0; }
 .sectionHead { margin-bottom: 15px; display: flex; align-items: end; justify-content: space-between; gap: 10px; }

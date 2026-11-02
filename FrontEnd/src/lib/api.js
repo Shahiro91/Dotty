@@ -1,15 +1,19 @@
 // En producción el backend sirve el frontend, así que la API es del mismo dominio.
 const API_URL = import.meta.env.VITE_API_URL ?? (import.meta.env.PROD ? '' : 'http://localhost:3000')
 
-export async function apiRequest(path, { token, body, ...options } = {}) {
-  const response = await fetch(`${API_URL}/api${path}`, {
+export function apiUrl(path) {
+  return `${API_URL}/api${path}`
+}
+
+export async function apiRequest(path, { token, body, rawBody, ...options } = {}) {
+  const response = await fetch(apiUrl(path), {
     ...options,
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     },
-    ...(body ? { body: JSON.stringify(body) } : {}),
+    ...(body ? { body: JSON.stringify(body) } : rawBody ? { body: rawBody } : {}),
   })
   const result = await response.json().catch(() => ({}))
   if (!response.ok) {
