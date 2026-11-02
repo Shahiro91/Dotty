@@ -1612,7 +1612,7 @@ app.get('/api/partner/products', authenticate, requirePartner, async (req, res, 
               image_scale AS "imageScale",
               image_position_x AS "imagePositionX", image_position_y AS "imagePositionY",
               is_available AS "isAvailable"
-      FROM business_products WHERE business_id = $1 AND is_available = TRUE ORDER BY created_at DESC`,
+      FROM business_products WHERE business_id = $1 ORDER BY created_at DESC`,
       [req.businessId],
     )
     res.json({ products: rows })
@@ -1667,6 +1667,28 @@ app.patch('/api/partner/products/:id', authenticate, requirePartner, async (req,
                  image_position_x AS "imagePositionX", image_position_y AS "imagePositionY",
                  is_available AS "isAvailable"`,
       [product.name, product.description, product.category, product.price, product.pointsPerUnit, product.imageDataUrl, product.imageScale, product.imagePositionX, product.imagePositionY, productId, req.businessId],
+    )
+    if (!rows[0]) return res.status(404).json({ error: 'No se encontró ese producto en tu local.' })
+    res.json({ product: rows[0] })
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.patch('/api/partner/products/:id/availability', authenticate, requirePartner, async (req, res, next) => {
+  const productId = Number(req.params.id)
+  const isAvailable = req.body?.isAvailable
+  if (!Number.isSafeInteger(productId) || productId < 1 || typeof isAvailable !== 'boolean') {
+    return res.status(400).json({ error: 'Indicá si el producto está disponible.' })
+  }
+  try {
+    const { rows } = await pool.query(
+      `UPDATE business_products SET is_available = $1 WHERE id = $2 AND business_id = $3
+       RETURNING id, name, description, category, price, points_per_unit AS "pointsPerUnit",
+                 image_data_url AS "imageDataUrl", image_scale AS "imageScale",
+                 image_position_x AS "imagePositionX", image_position_y AS "imagePositionY",
+                 is_available AS "isAvailable"`,
+      [isAvailable, productId, req.businessId],
     )
     if (!rows[0]) return res.status(404).json({ error: 'No se encontró ese producto en tu local.' })
     res.json({ product: rows[0] })

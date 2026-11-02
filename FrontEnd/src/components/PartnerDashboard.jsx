@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { AlertCircle, ArrowLeft, ArrowUpRight, BarChart3, Check, ChevronDown, ChevronRight, CircleDollarSign, Copy, CreditCard, Eye, FileSpreadsheet, FolderOpen, History, ImagePlus, LoaderCircle, LogOut, Menu, MessageCircle, Package, Pencil, Plus, Printer, RefreshCw, Save, Sparkles, Store, Trash2, Users, UserPlus, X } from 'lucide-react'
+import { AlertCircle, ArrowLeft, ArrowUpRight, BarChart3, Check, ChevronDown, ChevronRight, CircleDollarSign, Copy, CreditCard, Eye, FileSpreadsheet, FolderOpen, History, ImagePlus, LoaderCircle, LogOut, Menu, MessageCircle, Package, Pencil, Plus, Printer, RefreshCw, Save, Sparkles, Store, ToggleLeft, ToggleRight, Trash2, Users, UserPlus, X } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 import { apiRequest } from '../lib/api.js'
 import { businessFontOptions, getBusinessFontVariables } from '../lib/businessStyle.js'
@@ -400,6 +400,18 @@ function PartnerDashboard({ token, user, onSignOut }) {
       setProducts(remainingProducts)
       flash('Producto quitado del menú.')
     } catch (deleteError) { setError(deleteError.message) }
+  }
+
+  async function toggleProductAvailability(product) {
+    setBusyCategory(`product-${product.id}`)
+    setError('')
+    try {
+      const result = await apiRequest(`/partner/products/${product.id}/availability`, {
+        method: 'PATCH', token, body: { isAvailable: !product.isAvailable },
+      })
+      setProducts((current) => current.map((item) => item.id === product.id ? result.product : item))
+      flash(result.product.isAvailable ? 'Producto disponible en el menú.' : 'Producto marcado como no disponible.')
+    } catch (requestError) { setError(requestError.message) } finally { setBusyCategory(null) }
   }
 
   async function saveCategory(event) {
@@ -848,11 +860,12 @@ function PartnerDashboard({ token, user, onSignOut }) {
               <div className={styles.formActions}><button className={styles.primaryButton} type="submit" disabled={isSaving}>{isSaving ? 'Guardando...' : editingProductId ? 'Guardar producto' : 'Agregar producto'}</button>{editingProductId && <button className={styles.textButton} type="button" onClick={() => { setEditingProductId(null); setProductDraft({ ...emptyProduct, category: selectedCategory }) }}>Cancelar edición</button>}</div>
             </form>
             <div className={styles.listSection}>
-              <div className={styles.sectionHeading}><h2>Productos</h2><p>{categoryProducts.length} disponibles</p></div>
+              <div className={styles.sectionHeading}><h2>Productos</h2><p>{categoryProducts.filter((product) => product.isAvailable).length} disponibles · {categoryProducts.filter((product) => !product.isAvailable).length} pausados</p></div>
               {categoryProducts.length === 0 ? <p className={styles.empty}>Todavía no hay productos en esta categoría.</p> : categoryProducts.map((product) => (
                 <article className={styles.productRow} key={product.id}>
                   <div className={styles.productThumb}>{product.imageDataUrl ? <img src={product.imageDataUrl} alt="" style={{ '--image-scale': product.imageScale || 1, '--image-position-x': `${product.imagePositionX ?? 50}%`, '--image-position-y': `${product.imagePositionY ?? 50}%` }} /> : <Package size={18} />}</div>
-                  <div className={styles.rowMain}><strong>{product.name}</strong><span>{currency.format(product.price)} · {product.pointsPerUnit} pts/u</span></div>
+                  <div className={styles.rowMain}><strong>{product.name}</strong><span>{currency.format(product.price)} · {product.pointsPerUnit} pts/u · {product.isAvailable ? 'Disponible' : 'No disponible'}</span></div>
+                  <button className={styles.iconButton} type="button" title={product.isAvailable ? 'Marcar como no disponible' : 'Volver a activar'} aria-label={product.isAvailable ? `Desactivar ${product.name}` : `Activar ${product.name}`} disabled={busyCategory === `product-${product.id}`} onClick={() => toggleProductAvailability(product)}>{product.isAvailable ? <ToggleRight size={19} /> : <ToggleLeft size={19} />}</button>
                   <button className={styles.iconButton} type="button" title="Editar producto" aria-label={`Editar ${product.name}`} onClick={() => startEditingProduct(product)}><Pencil size={16} /></button>
                   <button className={styles.deleteButton} type="button" title="Eliminar producto" aria-label={`Eliminar ${product.name}`} onClick={() => removeProduct(product.id)}><Trash2 size={16} /></button>
                 </article>
