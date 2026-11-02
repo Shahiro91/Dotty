@@ -1673,7 +1673,7 @@ app.post('/api/partner/category-addons', authenticate, requirePartner, async (re
   if (!categoryName || categoryName.length > 60 || !name || name.length > 80 || !groupName || groupName.length > 80
     || !['single', 'multiple'].includes(selectionMode)
     || (productId !== null && (!Number.isSafeInteger(productId) || productId < 1))
-    || (requiredTwo && (productId === null || selectionMode !== 'multiple'))
+    || (requiredTwo && selectionMode !== 'multiple')
     || !Number.isSafeInteger(price) || price < 0 || price > 100_000_000) {
     return res.status(400).json({ error: 'Revisá el nombre, categoría y precio del agregado.' })
   }
@@ -1717,7 +1717,7 @@ app.patch('/api/partner/category-addons/:id', authenticate, requirePartner, asyn
   if (!Number.isSafeInteger(addonId) || addonId < 1 || !name || name.length > 80 || !groupName || groupName.length > 80
     || !['single', 'multiple'].includes(selectionMode)
     || (productId !== null && (!Number.isSafeInteger(productId) || productId < 1))
-    || (requiredTwo && (productId === null || selectionMode !== 'multiple'))
+    || (requiredTwo && selectionMode !== 'multiple')
     || !Number.isSafeInteger(price) || price < 0 || price > 100_000_000) {
     return res.status(400).json({ error: 'Revisa el nombre, grupo, producto y precio de la opcion.' })
   }
@@ -2624,20 +2624,21 @@ app.post('/api/orders', authenticate, requireCustomer, async (req, res, next) =>
       referralEnabled = businesses[0].referralEnabled
       referralPoints = businesses[0].referralPoints
       const { rows: products } = await pool.query(
-        `SELECT id, name, description, category, price, points_per_unit AS "pointsPerUnit"
-         FROM business_products WHERE business_id = $1 AND is_available = TRUE`,
+        `SELECT p.id, p.name, p.description, p.category, c.id AS "categoryId", p.price, p.points_per_unit AS "pointsPerUnit"
+         FROM business_products p JOIN business_categories c ON c.business_id = p.business_id AND c.name = p.category
+         WHERE p.business_id = $1 AND p.is_available = TRUE`,
         [businessId],
       )
       productById = new Map(products.map((product) => [String(product.id), product]))
       const { rows: requiredGroups } = await pool.query(
-        `SELECT product_id AS "productId", lower(group_name) AS "groupName"
+        `SELECT category_id AS "categoryId", product_id AS "productId", lower(group_name) AS "groupName"
          FROM business_category_addons WHERE business_id = $1 AND $2 = TRUE AND is_available = TRUE AND required_two = TRUE
-         GROUP BY product_id, lower(group_name)`,
+         GROUP BY category_id, product_id, lower(group_name)`,
         [businessId, businesses[0].addonsEnabled],
       )
       for (const group of requiredGroups) {
-        const productKey = String(group.productId)
-        requiredTwoGroupsByProduct.set(productKey, [...(requiredTwoGroupsByProduct.get(productKey) || []), group.groupName])
+        const scopeKey = group.productId == null ? `category:${group.categoryId}` : `product:${group.productId}`
+        requiredTwoGroupsByProduct.set(scopeKey, [...(requiredTwoGroupsByProduct.get(scopeKey) || []), group])
       }
       if (requestedAddonIds.length) {
         const uniqueAddonIds = [...new Set(requestedAddonIds)]
@@ -2681,11 +2682,13 @@ app.post('/api/orders', authenticate, requireCustomer, async (req, res, next) =>
       if (selectedSingleGroups.has(groupKey)) return res.status(400).json({ error: 'ElegÃ­ una sola opciÃ³n por grupo.' })
       selectedSingleGroups.add(groupKey)
     }
-    const requiredGroupNames = businessId ? requiredTwoGroupsByProduct.get(String(product.id)) || [] : []
-    for (const groupName of requiredGroupNames) {
+    const requiredGroups = businessId
+      ? [...(requiredTwoGroupsByProduct.get(`category:${product.categoryId}`) || []), ...(requiredTwoGroupsByProduct.get(`product:${product.id}`) || [])]
+      : []
+    for (const group of requiredGroups) {
       const selectedCount = selectedAddons.filter((addon) => addon.requiredTwo === true
-        && String(addon.productId) === String(product.id)
-        && addon.groupName.toLocaleLowerCase('es') === groupName).length
+        && (group.productId == null ? addon.productId == null : String(addon.productId) === String(group.productId))
+        && addon.groupName.toLocaleLowerCase('es') === group.groupName).length
       if (selectedCount !== 2) return res.status(400).json({ error: 'Elegí exactamente dos opciones para este producto.' })
     }
     const addonTotal = selectedAddons.reduce((sum, addon) => sum + addon.price, 0)
