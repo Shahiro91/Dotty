@@ -132,7 +132,7 @@ function PartnerDashboard({ token, user, onSignOut }) {
   const [openingHoursSchedule, setOpeningHoursSchedule] = useState(null)
   const [categories, setCategories] = useState([])
   const [categoryAddons, setCategoryAddons] = useState([])
-  const [addonDraft, setAddonDraft] = useState({ name: '', price: '' })
+  const [addonDraft, setAddonDraft] = useState({ name: '', price: '', groupName: 'Opciones adicionales', selectionMode: 'multiple', productId: '', requiredTwo: false })
   const [editingAddonId, setEditingAddonId] = useState(null)
   const [products, setProducts] = useState([])
   const [rewards, setRewards] = useState([])
@@ -479,15 +479,15 @@ function PartnerDashboard({ token, user, onSignOut }) {
     event.preventDefault()
     setIsSaving(true)
     setError('')
-    const body = { category: selectedCategory, name: addonDraft.name, price: Number(addonDraft.price) }
+    const body = { category: selectedCategory, ...addonDraft, productId: addonDraft.productId ? Number(addonDraft.productId) : null, price: Number(addonDraft.price || 0) }
     try {
       const result = editingAddonId
         ? await apiRequest(`/partner/category-addons/${editingAddonId}`, { method: 'PATCH', token, body })
         : await apiRequest('/partner/category-addons', { method: 'POST', token, body })
       setCategoryAddons((current) => editingAddonId
-        ? current.map((addon) => addon.id === editingAddonId ? result.addon : addon)
+        ? current.map((addon) => (result.groupAddons || [result.addon]).find((updated) => updated.id === addon.id) || addon)
         : [...current, result.addon])
-      setAddonDraft({ name: '', price: '' })
+      setAddonDraft((current) => ({ ...current, name: '', price: '' }))
       setEditingAddonId(null)
       flash(editingAddonId ? 'Agregado actualizado.' : 'Agregado agregado a la categoría.')
     } catch (saveError) { setError(saveError.message) } finally { setIsSaving(false) }
@@ -495,7 +495,7 @@ function PartnerDashboard({ token, user, onSignOut }) {
 
   function startEditingAddon(addon) {
     setEditingAddonId(addon.id)
-    setAddonDraft({ name: addon.name, price: String(addon.price) })
+    setAddonDraft({ name: addon.name, price: addon.price ? String(addon.price) : '', groupName: addon.groupName, selectionMode: addon.selectionMode, productId: addon.productId ? String(addon.productId) : '', requiredTwo: addon.requiredTwo === true })
   }
 
   async function removeCategoryAddon(addonId) {
@@ -504,7 +504,7 @@ function PartnerDashboard({ token, user, onSignOut }) {
       setCategoryAddons((current) => current.filter((addon) => addon.id !== addonId))
       if (editingAddonId === addonId) {
         setEditingAddonId(null)
-        setAddonDraft({ name: '', price: '' })
+        setAddonDraft({ name: '', price: '', groupName: 'Opciones adicionales', selectionMode: 'multiple', productId: '', requiredTwo: false })
       }
       flash('Agregado quitado de la categoría.')
     } catch (deleteError) { setError(deleteError.message) }
@@ -852,7 +852,7 @@ function PartnerDashboard({ token, user, onSignOut }) {
             <span className={styles.categoryContext}><FolderOpen size={15} /> Categoría seleccionada</span>
           </header>
           <section className={styles.addonManager}>
-            <div className={styles.sectionHeading}><h2>Agregados para {selectedCategory}</h2><p>Se ofrecen como opciones adicionales en todos los productos de esta categoría.</p></div>
+            <div className={styles.sectionHeading}><h2>Opciones para {selectedCategory}</h2><p>Podés aplicar cada grupo a toda la categoría o a un producto específico.</p></div>
             <div className={styles.addonToggleRow}>
               <p>Opciones para todos los productos de esta categoría</p>
               <label className={styles.switchRow}>
@@ -862,14 +862,19 @@ function PartnerDashboard({ token, user, onSignOut }) {
               </label>
             </div>
             <form className={styles.addonForm} onSubmit={saveCategoryAddon}>
-              <div><label className={styles.fieldLabel} htmlFor="addon-name">Nombre del agregado</label><input className={styles.textInput} id="addon-name" maxLength={80} placeholder="Ej: Extra salsa, porción grande, sin gluten..." value={addonDraft.name} onChange={(event) => setAddonDraft({ ...addonDraft, name: event.target.value })} required /></div>
-              <div><label className={styles.fieldLabel} htmlFor="addon-price">Precio adicional</label><input className={styles.textInput} id="addon-price" type="number" min="0" max="100000000" step="1" value={addonDraft.price} onChange={(event) => setAddonDraft({ ...addonDraft, price: event.target.value })} required /></div>
-              <div className={styles.addonFormActions}><button className={styles.primaryButton} type="submit" disabled={isSaving}>{isSaving ? 'Guardando...' : editingAddonId ? 'Guardar' : 'Agregar opción'}</button>{editingAddonId && <button className={styles.textButton} type="button" onClick={() => { setEditingAddonId(null); setAddonDraft({ name: '', price: '' }) }}>Cancelar</button>}</div>
+              <div><label className={styles.fieldLabel} htmlFor="addon-product">Aplicar a</label><select className={styles.textInput} id="addon-product" value={addonDraft.productId} onChange={(event) => { const productId = event.target.value; const existingGroup = categoryAddons.find((addon) => addon.category === selectedCategory && String(addon.productId || '') === productId && addon.groupName.toLocaleLowerCase('es') === addonDraft.groupName.trim().toLocaleLowerCase('es')); setAddonDraft((current) => ({ ...current, productId, requiredTwo: existingGroup?.requiredTwo || false, ...(existingGroup ? { selectionMode: existingGroup.selectionMode } : {}) })) }}><option value="">Todos los productos de {selectedCategory}</option>{products.filter((product) => product.category === selectedCategory && product.isAvailable !== false).map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}</select></div>
+              <div><label className={styles.fieldLabel} htmlFor="addon-group">Grupo de opciones</label><input className={styles.textInput} id="addon-group" list="addon-group-list" maxLength={80} placeholder="Ej: Tamaño, Sabores..." value={addonDraft.groupName} onChange={(event) => { const groupName = event.target.value; const existingGroup = categoryAddons.find((addon) => addon.category === selectedCategory && String(addon.productId || '') === addonDraft.productId && addon.groupName.toLocaleLowerCase('es') === groupName.trim().toLocaleLowerCase('es')); setAddonDraft((current) => ({ ...current, groupName, requiredTwo: existingGroup?.requiredTwo || false, ...(existingGroup ? { selectionMode: existingGroup.selectionMode } : {}) })) }} required /><datalist id="addon-group-list">{[...new Set(categoryAddons.filter((addon) => addon.category === selectedCategory && String(addon.productId || '') === addonDraft.productId).map((addon) => addon.groupName))].map((groupName) => <option key={groupName} value={groupName} />)}</datalist></div>
+              <div><label className={styles.fieldLabel} htmlFor="addon-selection-mode">Tipo de elección</label><select className={styles.textInput} id="addon-selection-mode" value={addonDraft.selectionMode} onChange={(event) => setAddonDraft({ ...addonDraft, selectionMode: event.target.value })}><option value="single" disabled={addonDraft.requiredTwo}>Una opción (ej. tamaño)</option><option value="multiple">Varias opciones (ej. extras o sabores)</option></select></div>
+              <label className={styles.addonRequiredTwo}><input type="checkbox" checked={addonDraft.requiredTwo} disabled={!editingAddonId || !addonDraft.productId || categoryAddons.filter((addon) => addon.category === selectedCategory && String(addon.productId || '') === addonDraft.productId && addon.groupName.toLocaleLowerCase('es') === addonDraft.groupName.trim().toLocaleLowerCase('es')).length < 2} onChange={(event) => setAddonDraft({ ...addonDraft, requiredTwo: event.target.checked, selectionMode: event.target.checked ? 'multiple' : addonDraft.selectionMode })} /><span>Exigir exactamente 2 opciones en este producto</span></label>
+              <small className={styles.addonRuleHelp}>Guardá al menos dos opciones para un producto. Después editá una para activar la regla.</small>
+              <div><label className={styles.fieldLabel} htmlFor="addon-name">Nombre de la opción</label><input className={styles.textInput} id="addon-name" maxLength={80} placeholder="Ej: Grande, a la piedra, extra salsa..." value={addonDraft.name} onChange={(event) => setAddonDraft({ ...addonDraft, name: event.target.value })} required /></div>
+              <div><label className={styles.fieldLabel} htmlFor="addon-price">Precio extra (opcional)</label><input className={styles.textInput} id="addon-price" type="number" min="0" max="100000000" step="1" placeholder="Sin extra" value={addonDraft.price} onChange={(event) => setAddonDraft({ ...addonDraft, price: event.target.value })} /></div>
+              <div className={styles.addonFormActions}><button className={styles.primaryButton} type="submit" disabled={isSaving}>{isSaving ? 'Guardando...' : editingAddonId ? 'Guardar' : 'Agregar opción'}</button>{editingAddonId && <button className={styles.textButton} type="button" onClick={() => { setEditingAddonId(null); setAddonDraft({ name: '', price: '', groupName: 'Opciones adicionales', selectionMode: 'multiple', productId: '', requiredTwo: false }) }}>Cancelar</button>}</div>
             </form>
             {categoryAddons.filter((addon) => addon.category === selectedCategory).length === 0
               ? <p className={styles.addonEmpty}>Todavía no hay agregados en esta categoría.</p>
               : <div className={styles.addonList}>{categoryAddons.filter((addon) => addon.category === selectedCategory).map((addon) => <article className={styles.addonRow} key={addon.id}>
-                <div className={styles.rowMain}><strong>{addon.name}</strong><span>{addon.price === 0 ? 'Sin cargo' : `+${currency.format(addon.price)}`}</span></div>
+                <div className={styles.rowMain}><strong>{addon.groupName}: {addon.name}</strong><span>{addon.productId ? `Solo ${addon.productName || products.find((product) => String(product.id) === String(addon.productId))?.name || 'producto'} · ` : 'Toda la categoría · '}{addon.requiredTwo ? 'Exige 2 · ' : ''}{addon.price === 0 ? 'Sin cargo' : `+${currency.format(addon.price)}`}</span></div>
                 <button className={styles.iconButton} type="button" title={`Editar ${addon.name}`} aria-label={`Editar ${addon.name}`} onClick={() => startEditingAddon(addon)}><Pencil size={15} /></button>
                 <button className={styles.deleteButton} type="button" title={`Quitar ${addon.name}`} aria-label={`Quitar ${addon.name}`} onClick={() => removeCategoryAddon(addon.id)}><Trash2 size={15} /></button>
               </article>)}</div>}
