@@ -46,7 +46,7 @@ Si usás un dominio propio, definí `FRONTEND_ORIGIN=https://tudominio.com`. Par
 
 ## Suscripción de los locales
 
-Plan Básico $15.000/mes y VIP $25.000/mes. Si pasan 5 días del vencimiento sin pago, la cuenta se suspende (panel, tienda, pedidos y canjes quedan bloqueados) sin borrar datos. Al pagar se reactiva. Los locales nuevos arrancan con el pago pendiente desde el alta y tienen los 5 días de gracia para abonar.
+Plan Básico $15.000/mes y VIP $25.000/mes. Los locales nuevos tienen 30 días de prueba gratis desde que activan su cuenta. El cambio de plan se aplica de inmediato y el siguiente pago usa el precio del plan elegido. Si pasan 5 días del vencimiento sin pago, la cuenta se suspende (panel, tienda, pedidos y canjes quedan bloqueados) sin borrar datos. Al pagar se reactiva.
 
 El cobro de suscripciones usa Checkout Pro de Mercado Pago. En desarrollo local, el backend arranca en modo sandbox y no acepta tokens de producción:
 

@@ -70,6 +70,7 @@ async function initializeDatabase() {
     ALTER TABLE businesses ADD COLUMN IF NOT EXISTS orders_shift_started_at TIMESTAMPTZ;
     ALTER TABLE businesses ADD COLUMN IF NOT EXISTS subscription_due_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '1 month');
     ALTER TABLE businesses ADD COLUMN IF NOT EXISTS pending_plan VARCHAR(20) CHECK (pending_plan IN ('basic', 'vip'));
+    UPDATE businesses SET plan = pending_plan, pending_plan = NULL WHERE pending_plan IS NOT NULL;
     ALTER TABLE businesses ALTER COLUMN opening_hours TYPE TEXT;
     CREATE TABLE IF NOT EXISTS subscription_payments (
       id BIGSERIAL PRIMARY KEY,
@@ -443,7 +444,7 @@ async function requireAdmin(req, res, next) {
 
 const PLAN_PRICES = { basic: 15000, vip: 25000 }
 const PLAN_LABELS = { basic: 'Básico', vip: 'VIP' }
-const BILLING_INITIAL_TRIAL_DAYS = 7
+const BILLING_INITIAL_TRIAL_DAYS = 30
 const BILLING_GRACE_DAYS = 5
 const BILLING_PAY_WINDOW_DAYS = 10
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -512,7 +513,7 @@ async function loadBilling(businessId) {
     availablePlans: Object.entries(PLAN_PRICES).map(([id, price]) => ({ id, label: PLAN_LABELS[id], price })),
     requiresInitialPayment,
     initialTrial,
-    canPay: rows[0].pendingPlan ? Date.now() >= new Date(rows[0].subscriptionDueAt).getTime() : initialTrial || details.canPay,
+    canPay: initialTrial || details.canPay,
     payments,
     paymentsConfigured: !mercadoPagoConfigurationMessage(),
     paymentConfigurationMessage: mercadoPagoConfigurationMessage(),
@@ -547,8 +548,8 @@ async function applySubscriptionPayment(paymentId) {
   const client = await pool.connect()
   try {
     await client.query('BEGIN')
-    const { rows } = await client.query('SELECT plan, pending_plan AS "pendingPlan" FROM businesses WHERE id = $1 FOR UPDATE', [match[1]])
-    const chargedPlan = rows[0]?.pendingPlan || rows[0]?.plan
+    const { rows } = await client.query('SELECT plan FROM businesses WHERE id = $1 FOR UPDATE', [match[1]])
+    const chargedPlan = rows[0]?.plan
     if (!rows[0] || Number(payment.transaction_amount) < PLAN_PRICES[chargedPlan]) {
       await client.query('ROLLBACK')
       return { applied: false, status: 'invalid' }
@@ -561,7 +562,7 @@ async function applySubscriptionPayment(paymentId) {
     if (inserted.rowCount) {
       const { rows: updated } = await client.query(
         `UPDATE businesses
-         SET plan = COALESCE(pending_plan, plan), pending_plan = NULL,
+         SET pending_plan = NULL,
              subscription_due_at = (CASE WHEN subscription_due_at + make_interval(days => $2) < NOW() THEN NOW() ELSE subscription_due_at END) + INTERVAL '1 month'
          WHERE id = $1 RETURNING subscription_due_at`,
         [match[1], BILLING_GRACE_DAYS],
@@ -1211,7 +1212,7 @@ app.put('/api/partner/billing/plan', authenticate, requirePartnerBilling, async 
   if (!Object.hasOwn(PLAN_PRICES, plan)) return res.status(400).json({ error: 'El plan elegido no es válido.' })
   try {
     const { rows } = await pool.query(
-      `UPDATE businesses SET pending_plan = CASE WHEN plan = $2 THEN NULL ELSE $2 END
+      `UPDATE businesses SET plan = $2, pending_plan = NULL
        WHERE id = $1 RETURNING plan, pending_plan AS "pendingPlan", subscription_due_at AS "subscriptionDueAt"`,
       [req.businessId, plan],
     )
@@ -1243,7 +1244,7 @@ app.post('/api/partner/billing/checkout', authenticate, requirePartnerBilling, a
     const preference = await mercadoPagoRequest('/checkout/preferences', {
       method: 'POST',
       body: JSON.stringify({
-        items: [{ id: billing.pendingPlan || billing.plan, title: `Dotty - Plan ${billing.pendingPlanLabel || billing.planLabel} (1 mes)`, quantity: 1, unit_price: billing.pendingPlanPrice || billing.price, currency_id: 'ARS' }],
+        items: [{ id: billing.plan, title: `Dotty - Plan ${billing.planLabel} (1 mes)`, quantity: 1, unit_price: billing.price, currency_id: 'ARS' }],
         external_reference: `sabor-vivo-business-${req.businessId}`,
         back_urls: { success: returnUrl, pending: returnUrl, failure: returnUrl },
         ...(origin.startsWith('https://') ? { auto_return: 'approved' } : {}),

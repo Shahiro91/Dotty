@@ -1221,26 +1221,13 @@ function BillingPanel({ token, billing, setBilling, isSuspended, onError }) {
     }
   }
 
-  async function schedulePlan(plan) {
+  async function changePlan(plan) {
     setIsChangingPlan(true)
     onError('')
     try {
       const result = await apiRequest('/partner/billing/plan', { method: 'PUT', token, body: { plan } })
       setBilling(result.billing)
       setSelectedPlan('')
-    } catch (changeError) {
-      onError(changeError.message)
-    } finally {
-      setIsChangingPlan(false)
-    }
-  }
-
-  async function cancelPlanChange() {
-    setIsChangingPlan(true)
-    onError('')
-    try {
-      const result = await apiRequest('/partner/billing/plan', { method: 'DELETE', token })
-      setBilling(result.billing)
     } catch (changeError) {
       onError(changeError.message)
     } finally {
@@ -1262,27 +1249,22 @@ function BillingPanel({ token, billing, setBilling, isSuspended, onError }) {
         {billing.status === 'grace' && <div><dt>Pagá hasta el</dt><dd>{formatLongDate(billing.graceEndsAt)}</dd></div>}
       </dl>
       <div className={styles.planChange}>
-        {billing.pendingPlan ? <>
-          <p>El plan <strong>{billing.pendingPlanLabel}</strong> quedará activo el {formatLongDate(billing.dueAt)}. Ese día vas a poder pagarlo a {currency.format(billing.pendingPlanPrice)}.</p>
-          <button type="button" className={styles.textButton} disabled={isChangingPlan} onClick={cancelPlanChange}>Cancelar cambio de plan</button>
-        </> : <>
-          <label htmlFor="billing-plan">Cambiar plan a partir del próximo vencimiento</label>
-          <div className={styles.planChangeControls}>
-            <select id="billing-plan" value={selectedPlan} onChange={(event) => setSelectedPlan(event.target.value)} disabled={isChangingPlan}>
-              <option value="">Elegí un plan</option>
-              {(billing.availablePlans || []).map((plan) => <option key={plan.id} value={plan.id} disabled={billing.plan === plan.id}>{plan.label} · {currency.format(plan.price)}/mes</option>)}
-            </select>
-            <button type="button" className={styles.textButton} disabled={!selectedPlan || isChangingPlan} onClick={() => schedulePlan(selectedPlan)}>{isChangingPlan ? 'Guardando...' : 'Programar cambio'}</button>
-          </div>
-          <p>El cambio no tiene un cobro ahora. Se aplicará al vencimiento y el siguiente pago será por el importe del nuevo plan.</p>
-        </>}
+        <label htmlFor="billing-plan">Cambiar plan ahora</label>
+        <div className={styles.planChangeControls}>
+          <select id="billing-plan" value={selectedPlan} onChange={(event) => setSelectedPlan(event.target.value)} disabled={isChangingPlan}>
+            <option value="">Elegí un plan</option>
+            {(billing.availablePlans || []).map((plan) => <option key={plan.id} value={plan.id} disabled={billing.plan === plan.id}>{plan.label} · {currency.format(plan.price)}/mes</option>)}
+          </select>
+          <button type="button" className={styles.textButton} disabled={!selectedPlan || isChangingPlan} onClick={() => changePlan(selectedPlan)}>{isChangingPlan ? 'Guardando...' : 'Cambiar ahora'}</button>
+        </div>
+        <p>El plan elegido queda activo de inmediato. El próximo pago se cobrará con el importe mensual de ese plan.</p>
       </div>
       <button type="button" className={styles.payButton} disabled={isPaying || !billing.canPay || !billing.paymentsConfigured} onClick={pay}>
-        {isPaying ? <LoaderCircle size={16} className={styles.spinner} /> : <CreditCard size={16} />} Pagar {currency.format(billing.pendingPlanPrice || billing.price)} con Mercado Pago
+        {isPaying ? <LoaderCircle size={16} className={styles.spinner} /> : <CreditCard size={16} />} Pagar {currency.format(billing.price)} con Mercado Pago
       </button>
-      {billing.initialTrial && billing.status !== 'suspended' && <p className={styles.billingHint}>Podés usar el panel durante tus primeros 7 días. Aboná antes del {formatLongDate(billing.dueAt)} para evitar la suspensión.</p>}
+      {billing.initialTrial && billing.status !== 'suspended' && <p className={styles.billingHint}>Tenés 30 días de prueba gratis. Aboná antes del {formatLongDate(billing.dueAt)} para evitar la suspensión.</p>}
       {!billing.paymentsConfigured && <p className={styles.billingHint}>{billing.paymentConfigurationMessage || 'El pago online todavía no está habilitado. Contactá a Dotty.'}</p>}
-      {billing.paymentsConfigured && !billing.canPay && <p className={styles.billingHint}>{billing.pendingPlan ? 'El pago del nuevo plan se habilita desde la fecha de vencimiento.' : 'El botón de pago se habilita 10 días antes del vencimiento.'}</p>}
+      {billing.paymentsConfigured && !billing.canPay && <p className={styles.billingHint}>El botón de pago se habilita 10 días antes del vencimiento.</p>}
       <p className={styles.billingHint}>Si no pagás dentro de los 5 días posteriores al vencimiento, la cuenta se suspende. No se elimina ningún dato.</p>
     </div>
     <div className={styles.billingCard}>
