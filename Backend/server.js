@@ -154,6 +154,7 @@ async function initializeDatabase() {
     ALTER TABLE business_category_addons ADD COLUMN IF NOT EXISTS selection_mode VARCHAR(12) NOT NULL DEFAULT 'multiple';
     ALTER TABLE business_category_addons ADD COLUMN IF NOT EXISTS product_id BIGINT REFERENCES business_products(id) ON DELETE CASCADE;
     ALTER TABLE business_category_addons ADD COLUMN IF NOT EXISTS required_two BOOLEAN NOT NULL DEFAULT FALSE;
+    ALTER TABLE business_category_addons ADD COLUMN IF NOT EXISTS is_required BOOLEAN NOT NULL DEFAULT FALSE;
     CREATE INDEX IF NOT EXISTS business_category_addons_active_idx ON business_category_addons (business_id, category_id, is_available);
     DROP INDEX IF EXISTS business_category_addons_name_idx;
     DROP INDEX IF EXISTS business_category_addons_group_name_idx;
@@ -854,7 +855,7 @@ app.get('/api/public/businesses/:slug', async (req, res, next) => {
       ),
       pool.query(
       `SELECT c.name AS category, a.id, a.name, a.price, a.group_name AS "groupName",
-              a.selection_mode AS "selectionMode", a.product_id AS "productId", a.required_two AS "requiredTwo"
+              a.selection_mode AS "selectionMode",               a.product_id AS "productId", a.required_two AS "requiredTwo", a.is_required AS "isRequired"
          FROM business_category_addons a JOIN business_categories c ON c.id = a.category_id
          WHERE a.business_id = $1 AND a.is_available = TRUE ORDER BY c.name, a.name`,
         [business.id],
@@ -1555,11 +1556,14 @@ app.get('/api/partner/categories', authenticate, requirePartner, async (req, res
 
 app.post('/api/partner/categories', authenticate, requirePartner, async (req, res, next) => {
   const name = typeof req.body?.name === 'string' ? req.body.name.trim() : ''
-  if (!name || name.length > 60) return res.status(400).json({ error: 'Ingresá un nombre de categoría válido.' })
+  const fractionalParts = req.body?.fractionalParts == null ? 0 : Number(req.body.fractionalParts)
+  if (!name || name.length > 60 || !Number.isInteger(fractionalParts) || (fractionalParts !== 0 && (fractionalParts < 2 || fractionalParts > 12))) {
+    return res.status(400).json({ error: 'Ingresá un nombre de categoría válido.' })
+  }
   try {
     const { rows } = await pool.query(
-      'INSERT INTO business_categories (business_id, name) VALUES ($1, $2) RETURNING name, fractional_parts AS "fractionalParts"',
-      [req.businessId, name],
+      'INSERT INTO business_categories (business_id, name, fractional_parts) VALUES ($1, $2, $3) RETURNING name, fractional_parts AS "fractionalParts"',
+      [req.businessId, name, fractionalParts],
     )
     res.status(201).json({ category: { ...rows[0], productCount: 0 } })
   } catch (error) {
@@ -1656,10 +1660,10 @@ app.get('/api/partner/category-addons', authenticate, requirePartner, async (req
     const { rows } = await pool.query(
       `SELECT a.id, c.name AS category, a.name, a.price,
               a.group_name AS "groupName", a.selection_mode AS "selectionMode",
-              a.product_id AS "productId", a.required_two AS "requiredTwo", p.name AS "productName"
+              a.product_id AS "productId", a.required_two AS "requiredTwo", a.is_required AS "isRequired", p.name AS "productName"
        FROM business_category_addons a JOIN business_categories c ON c.id = a.category_id
        LEFT JOIN business_products p ON p.id = a.product_id AND p.business_id = a.business_id
-       WHERE a.business_id = $1 AND a.is_available = TRUE ORDER BY c.name, a.name`,
+       WHERE a.business_id = $1 AND a.is_available = TRUE ORDER BY c.name, a.id`,
       [req.businessId],
     )
     res.json({ addons: rows })
@@ -1695,15 +1699,16 @@ app.post('/api/partner/category-addons', authenticate, requirePartner, async (re
       if (!rowCount) return res.status(400).json({ error: 'Elegí un producto disponible de esta categoría.' })
     }
     const { rows: existingGroup } = await pool.query(
-      'SELECT selection_mode, required_two FROM business_category_addons WHERE category_id = $1 AND product_id IS NOT DISTINCT FROM $3 AND lower(group_name) = lower($2) AND is_available = TRUE LIMIT 1',
+      'SELECT selection_mode, required_two, is_required FROM business_category_addons WHERE category_id = $1 AND product_id IS NOT DISTINCT FROM $3 AND lower(group_name) = lower($2) AND is_available = TRUE LIMIT 1',
       [categories[0].id, groupName, productId],
     )
     if (existingGroup[0] && (existingGroup[0].selection_mode !== selectionMode || existingGroup[0].required_two !== requiredTwo)) return res.status(400).json({ error: 'Mantené la misma configuración en todas las opciones del grupo.' })
+    const isRequired = existingGroup[0] ? existingGroup[0].is_required : req.body?.isRequired === true
     const { rows } = await pool.query(
-      `INSERT INTO business_category_addons (business_id, category_id, product_id, name, price, group_name, selection_mode, required_two)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       RETURNING id, name, price, group_name AS "groupName", selection_mode AS "selectionMode", product_id AS "productId", required_two AS "requiredTwo"`,
-      [req.businessId, categories[0].id, productId, name, price, groupName, selectionMode, requiredTwo],
+      `INSERT INTO business_category_addons (business_id, category_id, product_id, name, price, group_name, selection_mode, required_two, is_required)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       RETURNING id, name, price, group_name AS "groupName", selection_mode AS "selectionMode", product_id AS "productId", required_two AS "requiredTwo", is_required AS "isRequired"`,
+      [req.businessId, categories[0].id, productId, name, price, groupName, selectionMode, requiredTwo, isRequired],
     )
     res.status(201).json({ addon: { ...rows[0], category: categoryName } })
   } catch (error) {
@@ -1774,7 +1779,7 @@ app.patch('/api/partner/category-addons/:id', authenticate, requirePartner, asyn
     const { rows: groupAddons } = await pool.query(
       `SELECT a.id, c.name AS category, a.name, a.price, a.group_name AS "groupName",
               a.selection_mode AS "selectionMode", a.product_id AS "productId",
-              a.required_two AS "requiredTwo", p.name AS "productName"
+              a.required_two AS "requiredTwo", a.is_required AS "isRequired", p.name AS "productName"
        FROM business_category_addons a JOIN business_categories c ON c.id = a.category_id
        LEFT JOIN business_products p ON p.id = a.product_id AND p.business_id = a.business_id
        WHERE a.business_id = $1 AND a.category_id = $2 AND a.product_id IS NOT DISTINCT FROM $3
@@ -1787,6 +1792,124 @@ app.patch('/api/partner/category-addons/:id', authenticate, requirePartner, asyn
     if (error.code === '23505') return res.status(409).json({ error: 'Ya existe esa opcion en el grupo.' })
     next(error)
   }
+})
+
+function readGroupKey(body, prefix = '') {
+  const rawProductId = body?.[`${prefix}productId`]
+  return {
+    productId: rawProductId == null || rawProductId === '' ? null : Number(rawProductId),
+    groupName: typeof body?.[`${prefix}groupName`] === 'string' ? body[`${prefix}groupName`].trim() : '',
+  }
+}
+
+app.patch('/api/partner/category-addon-groups', authenticate, requirePartner, async (req, res, next) => {
+  const categoryName = typeof req.body?.category === 'string' ? req.body.category.trim() : ''
+  const current = readGroupKey(req.body)
+  const next_ = readGroupKey(req.body, 'new')
+  const selectionMode = req.body?.selectionMode
+  const isRequired = req.body?.isRequired === true
+  const clearRequiredTwo = req.body?.clearRequiredTwo === true
+  if (!categoryName || !current.groupName || current.groupName.length > 80 || !next_.groupName || next_.groupName.length > 80
+    || !['single', 'multiple'].includes(selectionMode)
+    || [current.productId, next_.productId].some((id) => id !== null && (!Number.isSafeInteger(id) || id < 1))) {
+    return res.status(400).json({ error: 'Revisá el nombre y la configuración del grupo.' })
+  }
+  const client = await pool.connect()
+  let transactionStarted = false
+  try {
+    await client.query('BEGIN')
+    transactionStarted = true
+    const { rows: categories } = await client.query('SELECT id FROM business_categories WHERE business_id = $1 AND name = $2', [req.businessId, categoryName])
+    if (!categories[0]) {
+      await client.query('ROLLBACK')
+      transactionStarted = false
+      return res.status(404).json({ error: 'No se encontró esa categoría.' })
+    }
+    const categoryId = categories[0].id
+    const { rows: members } = await client.query(
+      `SELECT required_two AS "requiredTwo" FROM business_category_addons
+       WHERE business_id = $1 AND category_id = $2 AND product_id IS NOT DISTINCT FROM $3 AND lower(group_name) = lower($4) AND is_available = TRUE FOR UPDATE`,
+      [req.businessId, categoryId, current.productId, current.groupName],
+    )
+    if (!members.length) {
+      await client.query('ROLLBACK')
+      transactionStarted = false
+      return res.status(404).json({ error: 'No encontramos ese grupo.' })
+    }
+    const keepsRequiredTwo = members[0].requiredTwo && !clearRequiredTwo
+    if (keepsRequiredTwo && selectionMode !== 'multiple') {
+      await client.query('ROLLBACK')
+      transactionStarted = false
+      return res.status(400).json({ error: 'Quitá primero la regla anterior de "exactamente 2 opciones".' })
+    }
+    const moved = String(current.productId ?? '') !== String(next_.productId ?? '') || current.groupName.toLocaleLowerCase('es') !== next_.groupName.toLocaleLowerCase('es')
+    if (moved) {
+      if (keepsRequiredTwo) {
+        await client.query('ROLLBACK')
+        transactionStarted = false
+        return res.status(400).json({ error: 'Quitá primero la regla anterior de "exactamente 2 opciones".' })
+      }
+      const { rowCount } = await client.query(
+        `SELECT 1 FROM business_category_addons
+         WHERE business_id = $1 AND category_id = $2 AND product_id IS NOT DISTINCT FROM $3 AND lower(group_name) = lower($4) AND is_available = TRUE`,
+        [req.businessId, categoryId, next_.productId, next_.groupName],
+      )
+      if (rowCount) {
+        await client.query('ROLLBACK')
+        transactionStarted = false
+        return res.status(409).json({ error: 'Ya existe un grupo con ese nombre.' })
+      }
+    }
+    if (next_.productId !== null) {
+      const { rowCount } = await client.query('SELECT 1 FROM business_products WHERE id = $1 AND business_id = $2 AND category = $3 AND is_available = TRUE', [next_.productId, req.businessId, categoryName])
+      if (!rowCount) {
+        await client.query('ROLLBACK')
+        transactionStarted = false
+        return res.status(400).json({ error: 'Elegí un producto disponible de esta categoría.' })
+      }
+    }
+    await client.query(
+      `UPDATE business_category_addons SET group_name = $1, product_id = $2, selection_mode = $3, is_required = $4,
+         required_two = required_two AND NOT $5
+       WHERE business_id = $6 AND category_id = $7 AND product_id IS NOT DISTINCT FROM $8 AND lower(group_name) = lower($9) AND is_available = TRUE`,
+      [next_.groupName, next_.productId, selectionMode, isRequired, clearRequiredTwo, req.businessId, categoryId, current.productId, current.groupName],
+    )
+    const { rows: groupAddons } = await client.query(
+      `SELECT a.id, c.name AS category, a.name, a.price, a.group_name AS "groupName",
+              a.selection_mode AS "selectionMode", a.product_id AS "productId",
+              a.required_two AS "requiredTwo", a.is_required AS "isRequired", p.name AS "productName"
+       FROM business_category_addons a JOIN business_categories c ON c.id = a.category_id
+       LEFT JOIN business_products p ON p.id = a.product_id AND p.business_id = a.business_id
+       WHERE a.business_id = $1 AND a.category_id = $2 AND a.product_id IS NOT DISTINCT FROM $3
+         AND lower(a.group_name) = lower($4) AND a.is_available = TRUE ORDER BY a.id`,
+      [req.businessId, categoryId, next_.productId, next_.groupName],
+    )
+    await client.query('COMMIT')
+    transactionStarted = false
+    res.json({ groupAddons })
+  } catch (error) {
+    if (transactionStarted) await client.query('ROLLBACK')
+    next(error)
+  } finally {
+    client.release()
+  }
+})
+
+app.delete('/api/partner/category-addon-groups', authenticate, requirePartner, async (req, res, next) => {
+  const categoryName = typeof req.body?.category === 'string' ? req.body.category.trim() : ''
+  const { productId, groupName } = readGroupKey(req.body)
+  if (!categoryName || !groupName || (productId !== null && (!Number.isSafeInteger(productId) || productId < 1))) {
+    return res.status(400).json({ error: 'Revisá el grupo que querés eliminar.' })
+  }
+  try {
+    await pool.query(
+      `UPDATE business_category_addons SET is_available = FALSE
+       WHERE business_id = $1 AND category_id = (SELECT id FROM business_categories WHERE business_id = $1 AND name = $2)
+         AND product_id IS NOT DISTINCT FROM $3 AND lower(group_name) = lower($4) AND is_available = TRUE`,
+      [req.businessId, categoryName, productId, groupName],
+    )
+    res.sendStatus(204)
+  } catch (error) { next(error) }
 })
 app.delete('/api/partner/category-addons/:id', authenticate, requirePartner, async (req, res, next) => {
   try {
@@ -2618,6 +2741,7 @@ app.post('/api/orders', authenticate, requireCustomer, async (req, res, next) =>
   let productById = menuById
   const addonById = new Map()
   const requiredTwoGroupsByProduct = new Map()
+  const mustChooseGroupsByScope = new Map()
   if (businessSlug) {
     try {
       const { rows: businesses } = await pool.query(
@@ -2649,6 +2773,16 @@ app.post('/api/orders', authenticate, requireCustomer, async (req, res, next) =>
       for (const group of requiredGroups) {
         const scopeKey = group.productId == null ? `category:${group.categoryId}` : `product:${group.productId}`
         requiredTwoGroupsByProduct.set(scopeKey, [...(requiredTwoGroupsByProduct.get(scopeKey) || []), group])
+      }
+      const { rows: mustChooseGroups } = await pool.query(
+        `SELECT category_id AS "categoryId", product_id AS "productId", lower(group_name) AS "groupName", MIN(group_name) AS "label"
+         FROM business_category_addons WHERE business_id = $1 AND $2 = TRUE AND is_available = TRUE AND is_required = TRUE
+         GROUP BY category_id, product_id, lower(group_name)`,
+        [businessId, businesses[0].addonsEnabled],
+      )
+      for (const group of mustChooseGroups) {
+        const scopeKey = group.productId == null ? `category:${group.categoryId}` : `product:${group.productId}`
+        mustChooseGroupsByScope.set(scopeKey, [...(mustChooseGroupsByScope.get(scopeKey) || []), group])
       }
       if (requestedAddonIds.length) {
         const uniqueAddonIds = [...new Set(requestedAddonIds)]
@@ -2714,6 +2848,14 @@ app.post('/api/orders', authenticate, requireCustomer, async (req, res, next) =>
         && (group.productId == null ? addon.productId == null : String(addon.productId) === String(group.productId))
         && addon.groupName.toLocaleLowerCase('es') === group.groupName).length
       if (selectedCount !== 2) return res.status(400).json({ error: 'Elegí exactamente dos opciones para este producto.' })
+    }
+    const mustChooseGroups = businessId
+      ? [...(mustChooseGroupsByScope.get(`category:${product.categoryId}`) || []), ...(Number(product.fractionalParts || 0) === 0 ? mustChooseGroupsByScope.get(`product:${product.id}`) || [] : [])]
+      : []
+    for (const group of mustChooseGroups) {
+      const chosen = selectedAddons.some((addon) => addon.groupName.toLocaleLowerCase('es') === group.groupName
+        && (group.productId == null ? addon.productId == null : String(addon.productId) === String(group.productId)))
+      if (!chosen) return res.status(400).json({ error: `Elegí una opción en "${group.label}" para ${product.name}.` })
     }
     const addonTotal = selectedAddons.reduce((sum, addon) => sum + addon.price, 0)
     const partsPrice = partProducts.length ? partProducts.reduce((sum, part) => sum + part.price, 0) : product.price

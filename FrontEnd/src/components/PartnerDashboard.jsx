@@ -6,6 +6,7 @@ import { businessFontOptions, getBusinessFontVariables } from '../lib/businessSt
 import { optimizeImageFile } from '../lib/image.js'
 import { currency } from '../data/menu.js'
 import CatalogImport from './CatalogImport.jsx'
+import AddonGroupsManager from './AddonGroupsManager.jsx'
 import LocalStorefront from './LocalStorefront.jsx'
 import styles from './PartnerDashboard.module.css'
 
@@ -123,6 +124,23 @@ function cropProductImage(imageDataUrl, imageScale, imagePositionX, imagePositio
   })
 }
 
+function CategoryModeField({ idPrefix, value, onChange }) {
+  const parts = Number(value)
+  return <div className={styles.categoryMode}>
+    <label className={styles.checkRow}>
+      <input type="checkbox" checked={parts > 0} onChange={(event) => onChange(event.target.checked ? '2' : '0')} />
+      <span>Se vende combinando gustos <small>(ej. pizza mitad y mitad)</small></span>
+    </label>
+    {parts > 0 && <>
+      <small className={styles.addonRuleHelp}>El cliente tiene que elegir todas las partes para poder agregarlo al carrito: no se puede comprar una parte suelta. Cargá en cada producto el precio de una parte; el total es la suma de las partes elegidas.</small>
+      <label className={styles.fieldLabel} htmlFor={`${idPrefix}-parts`}>¿En cuántas partes se divide?</label>
+      <select className={styles.textInput} id={`${idPrefix}-parts`} value={value} onChange={(event) => onChange(event.target.value)}>
+        {Array.from({ length: 11 }, (_, index) => index + 2).map((count) => <option key={count} value={count}>{count === 2 ? '2 (mitad y mitad)' : `${count} partes`}</option>)}
+      </select>
+    </>}
+  </div>
+}
+
 function PartnerDashboard({ token, user, onSignOut }) {
   const [currentTime, setCurrentTime] = useState(() => Date.now())
   const [isMobile, setIsMobile] = useState(() => window.matchMedia('(max-width: 900px)').matches)
@@ -132,8 +150,6 @@ function PartnerDashboard({ token, user, onSignOut }) {
   const [openingHoursSchedule, setOpeningHoursSchedule] = useState(null)
   const [categories, setCategories] = useState([])
   const [categoryAddons, setCategoryAddons] = useState([])
-  const [addonDraft, setAddonDraft] = useState({ name: '', price: '', groupName: '', selectionMode: 'multiple', productId: '', requiredTwo: false })
-  const [editingAddonId, setEditingAddonId] = useState(null)
   const [products, setProducts] = useState([])
   const [rewards, setRewards] = useState([])
   const [orders, setOrders] = useState([])
@@ -478,41 +494,6 @@ function PartnerDashboard({ token, user, onSignOut }) {
     } catch (saveError) { setError(saveError.message) } finally { setBusyCategory(null) }
   }
 
-  async function saveCategoryAddon(event) {
-    event.preventDefault()
-    setIsSaving(true)
-    setError('')
-    const body = { category: selectedCategory, ...addonDraft, productId: addonDraft.productId ? Number(addonDraft.productId) : null, price: Number(addonDraft.price || 0) }
-    try {
-      const result = editingAddonId
-        ? await apiRequest(`/partner/category-addons/${editingAddonId}`, { method: 'PATCH', token, body })
-        : await apiRequest('/partner/category-addons', { method: 'POST', token, body })
-      setCategoryAddons((current) => editingAddonId
-        ? current.map((addon) => (result.groupAddons || [result.addon]).find((updated) => updated.id === addon.id) || addon)
-        : [...current, result.addon])
-      setAddonDraft((current) => ({ ...current, name: '', price: '' }))
-      setEditingAddonId(null)
-      flash(editingAddonId ? 'Agregado actualizado.' : 'Agregado agregado a la categoría.')
-    } catch (saveError) { setError(saveError.message) } finally { setIsSaving(false) }
-  }
-
-  function startEditingAddon(addon) {
-    setEditingAddonId(addon.id)
-    setAddonDraft({ name: addon.name, price: addon.price ? String(addon.price) : '', groupName: addon.groupName, selectionMode: addon.selectionMode, productId: addon.productId ? String(addon.productId) : '', requiredTwo: addon.requiredTwo === true })
-  }
-
-  async function removeCategoryAddon(addonId) {
-    try {
-      await apiRequest(`/partner/category-addons/${addonId}`, { method: 'DELETE', token })
-      setCategoryAddons((current) => current.filter((addon) => addon.id !== addonId))
-      if (editingAddonId === addonId) {
-        setEditingAddonId(null)
-        setAddonDraft({ name: '', price: '', groupName: '', selectionMode: 'multiple', productId: '', requiredTwo: false })
-      }
-      flash('Agregado quitado de la categoría.')
-    } catch (deleteError) { setError(deleteError.message) }
-  }
-
   async function createCategory(event) {
     event.preventDefault()
     const name = categoryDraft.trim()
@@ -523,9 +504,10 @@ function PartnerDashboard({ token, user, onSignOut }) {
     setIsSaving(true)
     setError('')
     try {
-      const result = await apiRequest('/partner/categories', { method: 'POST', token, body: { name } })
+      const result = await apiRequest('/partner/categories', { method: 'POST', token, body: { name, fractionalParts: Number(categoryPartsDraft) } })
       setCategories((current) => [...current, result.category].sort((first, second) => first.name.localeCompare(second.name, 'es')))
       setCategoryDraft('')
+      setCategoryPartsDraft('0')
       setIsCreatingCategory(false)
       flash('Categoría creada.')
     } catch (saveError) { setError(saveError.message) } finally { setIsSaving(false) }
@@ -855,40 +837,25 @@ function PartnerDashboard({ token, user, onSignOut }) {
             </div>
             <span className={styles.categoryContext}><FolderOpen size={15} /> Categoría seleccionada</span>
           </header>
-          <section className={styles.addonManager}>
-            <div className={styles.sectionHeading}><h2>Extras y preferencias para {selectedCategory}</h2><p>Acá configurás personalizaciones del producto, como cocción o extras. Para combinar productos, cargalos en esta categoría y configurá la cantidad desde Catálogo &gt; Categorías.</p></div>
-            <div className={styles.addonToggleRow}>
-              <p>Opciones para todos los productos de esta categoría</p>
-              <label className={styles.switchRow}>
-                <span className={styles.switchLabel}>{business.addonsEnabled !== false ? 'Activados' : 'Desactivados'}</span>
-                <input className={styles.switchInput} type="checkbox" checked={business.addonsEnabled !== false} disabled={isSaving} onChange={(event) => toggleBusinessOption('addonsEnabled', event.target.checked)} aria-label="Activar agregados" />
-                <span className={styles.switchTrack} />
-              </label>
-            </div>
-            <form className={styles.addonForm} onSubmit={saveCategoryAddon}>
-              <div><label className={styles.fieldLabel} htmlFor="addon-product">¿A qué productos se aplica este grupo?</label><select className={styles.textInput} id="addon-product" value={addonDraft.productId} onChange={(event) => { const productId = event.target.value; const existingGroup = categoryAddons.find((addon) => addon.category === selectedCategory && String(addon.productId || '') === productId && addon.groupName.toLocaleLowerCase('es') === addonDraft.groupName.trim().toLocaleLowerCase('es')); setAddonDraft((current) => ({ ...current, productId, requiredTwo: existingGroup?.requiredTwo || false, ...(existingGroup ? { selectionMode: existingGroup.selectionMode } : {}) })) }}><option value="">A todos los productos de “{selectedCategory}”</option>{products.filter((product) => product.category === selectedCategory && product.isAvailable !== false).map((product) => <option key={product.id} value={product.id}>Solo a {product.name}</option>)}</select></div>
-              <div><label className={styles.fieldLabel} htmlFor="addon-group">Nombre del grupo (lo verá el cliente)</label><input className={styles.textInput} id="addon-group" list="addon-group-list" maxLength={80} placeholder="Ej: Coccion, Extras" value={addonDraft.groupName} onChange={(event) => { const groupName = event.target.value; const existingGroup = categoryAddons.find((addon) => addon.category === selectedCategory && String(addon.productId || '') === addonDraft.productId && addon.groupName.toLocaleLowerCase('es') === groupName.trim().toLocaleLowerCase('es')); setAddonDraft((current) => ({ ...current, groupName, requiredTwo: existingGroup?.requiredTwo || false, ...(existingGroup ? { selectionMode: existingGroup.selectionMode } : {}) })) }} required /><datalist id="addon-group-list">{[...new Set(categoryAddons.filter((addon) => addon.category === selectedCategory && String(addon.productId || '') === addonDraft.productId).map((addon) => addon.groupName))].map((groupName) => <option key={groupName} value={groupName} />)}</datalist></div>
-              <div><label className={styles.fieldLabel} htmlFor="addon-selection-mode">¿Cuántas opciones puede elegir?</label><select className={styles.textInput} id="addon-selection-mode" value={addonDraft.selectionMode} onChange={(event) => setAddonDraft({ ...addonDraft, selectionMode: event.target.value })}><option value="single" disabled={addonDraft.requiredTwo}>Una (ej. tamaño)</option><option value="multiple">Una o varias (ej. extras)</option></select></div>
-              <label className={styles.addonRequiredTwo}><input type="checkbox" checked={addonDraft.requiredTwo} onChange={(event) => setAddonDraft({ ...addonDraft, requiredTwo: event.target.checked, selectionMode: event.target.checked ? "multiple" : addonDraft.selectionMode })} /><span>Exigir exactamente 2 extras de este grupo (no productos)</span></label>
-              <small className={styles.addonRuleHelp}>Esta casilla limita extras o personalizaciones, no productos. Para armar una unidad con 2 o mas productos de esta categoria, configura opcionalmente las partes desde Catalogo &gt; Categorias.</small>
-              <div><label className={styles.fieldLabel} htmlFor="addon-name">Opción que vas a agregar</label><input className={styles.textInput} id="addon-name" maxLength={80} placeholder="A la piedra, extra queso" value={addonDraft.name} onChange={(event) => setAddonDraft({ ...addonDraft, name: event.target.value })} required /></div>
-              <div><label className={styles.fieldLabel} htmlFor="addon-price">Precio extra (opcional)</label><input className={styles.textInput} id="addon-price" type="number" min="0" max="100000000" step="1" placeholder="Sin extra" value={addonDraft.price} onChange={(event) => setAddonDraft({ ...addonDraft, price: event.target.value })} /></div>
-              <small className={styles.addonRuleHelp}>Para sumar otra personalizacion al mismo grupo, conserva el nombre del grupo y agrega otra opcion. Si cambias el nombre, creas otro grupo.</small><div className={styles.addonFormActions}><button className={styles.primaryButton} type="submit" disabled={isSaving}>{isSaving ? 'Guardando...' : editingAddonId ? 'Guardar opción' : addonDraft.groupName.trim() && categoryAddons.some((addon) => addon.category === selectedCategory && String(addon.productId || '') === addonDraft.productId && addon.groupName.toLocaleLowerCase('es') === addonDraft.groupName.trim().toLocaleLowerCase('es')) ? 'Agregar otra opción a este grupo' : 'Crear grupo y agregar opción'}</button>{editingAddonId && <button className={styles.textButton} type="button" onClick={() => { setEditingAddonId(null); setAddonDraft({ name: '', price: '', groupName: '', selectionMode: 'multiple', productId: '', requiredTwo: false }) }}>Cancelar</button>}</div>
-            </form>
-            {categoryAddons.filter((addon) => addon.category === selectedCategory).length === 0
-              ? <p className={styles.addonEmpty}>Todavía no hay agregados en esta categoría.</p>
-              : <div className={styles.addonList}>{categoryAddons.filter((addon) => addon.category === selectedCategory).map((addon) => <article className={styles.addonRow} key={addon.id}>
-                <div className={styles.rowMain}><strong>{addon.groupName}: {addon.name}</strong><span>{addon.productId ? `Solo ${addon.productName || products.find((product) => String(product.id) === String(addon.productId))?.name || 'producto'} · ` : 'Toda la categoría · '}{addon.requiredTwo ? 'Exige 2 · ' : ''}{addon.price === 0 ? 'Sin cargo' : `+${currency.format(addon.price)}`}</span></div>
-                <button className={styles.iconButton} type="button" title={`Editar ${addon.name}`} aria-label={`Editar ${addon.name}`} onClick={() => startEditingAddon(addon)}><Pencil size={15} /></button>
-                <button className={styles.deleteButton} type="button" title={`Quitar ${addon.name}`} aria-label={`Quitar ${addon.name}`} onClick={() => removeCategoryAddon(addon.id)}><Trash2 size={15} /></button>
-              </article>)}</div>}
-          </section>
+          <AddonGroupsManager
+            category={selectedCategory}
+            products={products}
+            addons={categoryAddons}
+            token={token}
+            enabled={business.addonsEnabled !== false}
+            isFractional={Number(categories.find((category) => category.name === selectedCategory)?.fractionalParts || 0) > 0}
+            isSaving={isSaving}
+            onToggleEnabled={(value) => toggleBusinessOption('addonsEnabled', value)}
+            onAddonsChange={setCategoryAddons}
+            onError={setError}
+            onSuccess={flash}
+          />
           <div className={styles.managementGrid}>
             <form className={styles.formSection} onSubmit={saveProduct}>
               <div className={styles.sectionHeading}><h2>{editingProductId ? 'Editar producto' : 'Agregar producto'}</h2><p>Se guardará en {selectedCategory}.</p></div>
               <label className={styles.fieldLabel} htmlFor="product-name">Nombre</label><input className={styles.textInput} id="product-name" maxLength={100} value={productDraft.name} onChange={(event) => setProductDraft({ ...productDraft, name: event.target.value })} required />
               <label className={styles.fieldLabel} htmlFor="product-description">Descripción</label><textarea className={styles.textArea} id="product-description" maxLength={500} rows={3} value={productDraft.description} onChange={(event) => setProductDraft({ ...productDraft, description: event.target.value })} />
-              <div className={styles.twoFields}><div><label className={styles.fieldLabel} htmlFor="product-price">Precio</label><input className={styles.textInput} id="product-price" type="number" min="1" step="1" value={productDraft.price} onChange={(event) => setProductDraft({ ...productDraft, price: event.target.value })} required /></div><div><label className={styles.fieldLabel} htmlFor="product-points">Puntos por unidad</label><input className={styles.textInput} id="product-points" type="number" min="0" step="1" value={productDraft.pointsPerUnit} onChange={(event) => setProductDraft({ ...productDraft, pointsPerUnit: event.target.value })} required /></div></div>
+              <div className={styles.twoFields}><div><label className={styles.fieldLabel} htmlFor="product-price">{Number(categories.find((category) => category.name === selectedCategory)?.fractionalParts) > 0 ? 'Precio de una parte' : 'Precio'}</label><input className={styles.textInput} id="product-price" type="number" min="1" step="1" value={productDraft.price} onChange={(event) => setProductDraft({ ...productDraft, price: event.target.value })} required /></div><div><label className={styles.fieldLabel} htmlFor="product-points">Puntos por unidad</label><input className={styles.textInput} id="product-points" type="number" min="0" step="1" value={productDraft.pointsPerUnit} onChange={(event) => setProductDraft({ ...productDraft, pointsPerUnit: event.target.value })} required /></div></div>
               <label className={styles.fieldLabel} htmlFor="product-image">Foto</label><input className={styles.fileInput} id="product-image" type="file" accept="image/*" onChange={(event) => selectImage(event, (image) => { setProductDraft((current) => ({ ...current, imageDataUrl: image, imageScale: 1, imagePositionX: 50, imagePositionY: 50 })); setCropImageRatio(1) })} />
               {productDraft.imageDataUrl && <>
                 <div className={styles.imageCropStage} style={{ width: `${cropStageWidth}px`, aspectRatio: safeCropRatio }} onPointerDown={startProductImageDrag} onPointerMove={moveProductImage} onPointerUp={stopProductImageDrag} onPointerCancel={stopProductImageDrag}>
@@ -922,10 +889,11 @@ function PartnerDashboard({ token, user, onSignOut }) {
         </section> : <section className={styles.categoryPage}>
           <header className={styles.categoryPageHeader}>
             <div><span className={styles.eyebrow}>CATÁLOGO</span><h2>Categorías</h2><p>Organizá el menú antes de cargar los productos.</p></div>
-            <button className={styles.primaryButton} type="button" onClick={() => { setIsCreatingCategory(true); setEditingCategory(null); setCategoryDraft(''); setError('') }} disabled={isCreatingCategory}><Plus size={16} /> Nueva categoría</button>
+            <button className={styles.primaryButton} type="button" onClick={() => { setIsCreatingCategory(true); setEditingCategory(null); setCategoryDraft(''); setCategoryPartsDraft('0'); setError('') }} disabled={isCreatingCategory}><Plus size={16} /> Nueva categoría</button>
           </header>
           {isCreatingCategory && <form className={styles.categoryCreateForm} onSubmit={createCategory}>
             <div><label className={styles.fieldLabel} htmlFor="new-category-name">Nombre de la categoría</label><input className={styles.textInput} id="new-category-name" maxLength={60} value={categoryDraft} onChange={(event) => setCategoryDraft(event.target.value)} autoFocus required /></div>
+            <CategoryModeField idPrefix="new-category" value={categoryPartsDraft} onChange={setCategoryPartsDraft} />
             <button className={styles.primaryButton} type="submit" disabled={isSaving}>{isSaving ? 'Guardando...' : 'Crear categoría'}</button>
             <button className={styles.textButton} type="button" onClick={() => { setIsCreatingCategory(false); setCategoryDraft('') }}>Cancelar</button>
           </form>}
@@ -937,13 +905,7 @@ function PartnerDashboard({ token, user, onSignOut }) {
                 {editingCategory === category.name ? <form className={styles.categoryEditForm} onSubmit={saveCategory}>
                   <label className={styles.fieldLabel} htmlFor={`edit-category-${category.name}`}>Nombre de la categoría</label>
                   <input className={styles.textInput} id={`edit-category-${category.name}`} maxLength={60} value={categoryDraft} onChange={(event) => setCategoryDraft(event.target.value)} autoFocus required />
-                  <label className={styles.fieldLabel} htmlFor={`edit-category-parts-${category.name}`}>¿Cómo se venden los productos de esta categoría?</label>
-                  <select className={styles.textInput} id={`edit-category-parts-${category.name}`} value={categoryPartsDraft} onChange={(event) => setCategoryPartsDraft(event.target.value)}>
-                    <option value="0">Venta tradicional: agregar un producto por vez</option>
-                    {Array.from({ length: 11 }, (_, index) => index + 2).map((count) => <option key={count} value={count}>Combinable: elegir {count} partes (productos) de esta categoría</option>)}
-                  </select>
-                  {Number(categoryPartsDraft) > 0 && <small className={styles.addonRuleHelp}>Activá esta modalidad solo en categorías con productos combinables. Las demás siguen con venta tradicional. El cliente elegirá {categoryPartsDraft} productos y se sumarán sus precios; cargá en cada uno el precio de una parte.</small>}
-                  <div className={styles.formActions}><button className={styles.primaryButton} type="submit" disabled={busyCategory === category.name}>Guardar</button><button className={styles.textButton} type="button" onClick={() => { setEditingCategory(null); setCategoryDraft(''); setCategoryPartsDraft('0') }}>Cancelar</button></div>
+                  <CategoryModeField idPrefix={`edit-category-${category.name}`} value={categoryPartsDraft} onChange={setCategoryPartsDraft} />                  <div className={styles.formActions}><button className={styles.primaryButton} type="submit" disabled={busyCategory === category.name}>Guardar</button><button className={styles.textButton} type="button" onClick={() => { setEditingCategory(null); setCategoryDraft(''); setCategoryPartsDraft('0') }}>Cancelar</button></div>
                 </form> : <>
                   <button className={styles.categoryCardOpen} type="button" onClick={() => { setSelectedCategory(category.name); setProductDraft({ ...emptyProduct, category: category.name }); setEditingProductId(null) }}>
                     <span className={styles.categoryCover}>{coverProduct ? <img src={coverProduct.imageDataUrl} alt="" style={{ '--image-scale': coverProduct.imageScale || 1, '--image-position-x': `${coverProduct.imagePositionX ?? 50}%`, '--image-position-y': `${coverProduct.imagePositionY ?? 50}%` }} /> : <FolderOpen size={30} />}</span>

@@ -242,6 +242,12 @@ function LocalStorefront({ slug, session, onAuthenticate, onSignOut, isPreview =
       selectedAddOns: [],
       cartKey,
     }
+    const hasCombinationAddons = addonsEnabled && categoryAddons.some((addon) => addon.category === currentCategory.name && addon.productId == null)
+    if (hasCombinationAddons) {
+      setCustomizingProduct(combinedItem)
+      setSelectedAddonIds([])
+      return
+    }
     setCart((current) => {
       const existing = current.find((item) => item.cartKey === cartKey)
       return existing
@@ -283,17 +289,20 @@ function LocalStorefront({ slug, session, onAuthenticate, onSignOut, isPreview =
     return () => { document.title = previousTitle }
   }, [business?.name, isPreview])
 
-  const customizerAddons = addonsEnabled && customizingProduct ? categoryAddons.filter((addon) => addon.category === customizingProduct.category && (addon.productId == null || String(addon.productId) === String(customizingProduct.id))) : []
+  const customizingCombination = Boolean(customizingProduct?.partProductIds)
+  const customizerAddons = addonsEnabled && customizingProduct ? categoryAddons.filter((addon) => addon.category === customizingProduct.category && (addon.productId == null || (!customizingCombination && String(addon.productId) === String(customizingProduct.id)))) : []
   const customizerAddonGroups = customizerAddons.reduce((groups, addon) => {
     const name = addon.groupName || 'Opciones adicionales'
     const scope = addon.productId == null ? 'category' : String(addon.productId)
     const key = `${scope}:${name.toLocaleLowerCase('es')}`
     const group = groups.find((item) => item.key === key)
     if (group) group.options.push(addon)
-    else groups.push({ key, name, productId: addon.productId, requiredTwo: addon.requiredTwo === true, selectionMode: addon.selectionMode || 'multiple', options: [addon] })
+    else groups.push({ key, name, productId: addon.productId, requiredTwo: addon.requiredTwo === true, isRequired: addon.isRequired === true, selectionMode: addon.selectionMode || 'multiple', options: [addon] })
     return groups
   }, [])
   const requiredTwoGroupsReady = customizerAddonGroups.filter((group) => group.requiredTwo).every((group) => group.options.filter((addon) => selectedAddonIds.includes(String(addon.id))).length === 2)
+  const mustChooseGroupsReady = customizerAddonGroups.filter((group) => group.isRequired).every((group) => group.options.some((addon) => selectedAddonIds.includes(String(addon.id))))
+  const customizerReady = requiredTwoGroupsReady && mustChooseGroupsReady
   const selectedAddonTotal = customizerAddons
     .filter((addon) => selectedAddonIds.includes(String(addon.id)))
     .reduce((sum, addon) => sum + Number(addon.price), 0)
@@ -322,12 +331,17 @@ function LocalStorefront({ slug, session, onAuthenticate, onSignOut, isPreview =
 
   function addCustomizedProduct() {
     if (!customizingProduct) return
-    if (!requiredTwoGroupsReady) {
-      setError('Elegí exactamente dos opciones en cada grupo obligatorio.')
+    if (!customizerReady) {
+      setError('Completá las opciones obligatorias antes de agregar.')
       return
     }
     const addons = customizerAddons.filter((addon) => selectedAddonIds.includes(String(addon.id)))
-    changeQuantity(customizingProduct, 1, addons)
+    if (customizingCombination) {
+      const cartKey = `${customizingProduct.cartKey}:${addons.map((addon) => String(addon.id)).sort().join(',')}`
+      changeQuantity({ ...customizingProduct, cartKey }, 1, addons)
+      setFractionalSelections([])
+      setIsCartOpen(true)
+    } else changeQuantity(customizingProduct, 1, addons)
     setCustomizingProduct(null)
     setSelectedAddonIds([])
   }
@@ -593,8 +607,8 @@ function LocalStorefront({ slug, session, onAuthenticate, onSignOut, isPreview =
           <div className={styles.addonChoices}>{customizerAddonGroups.map((group) => {
             const groupAddonIds = group.options.map((addon) => String(addon.id))
             return <fieldset className={styles.addonChoiceGroup} key={group.key}>
-              <legend>{group.name}</legend>
-              {group.selectionMode === 'single' && <label className={styles.addonChoice}>
+              <legend>{group.name}{group.isRequired && <em className={styles.requiredTag}> · obligatorio</em>}</legend>
+              {group.selectionMode === 'single' && !group.isRequired && <label className={styles.addonChoice}>
                 <input type="radio" name={`addon-group-${customizingProduct.id}-${group.key}`} checked={!groupAddonIds.some((id) => selectedAddonIds.includes(id))} onChange={() => setSelectedAddonIds((current) => current.filter((id) => !groupAddonIds.includes(id)))} />
                 <span>Sin preferencia</span><strong>Sin cargo</strong>
               </label>}
@@ -617,7 +631,7 @@ function LocalStorefront({ slug, session, onAuthenticate, onSignOut, isPreview =
             </fieldset>
           })}</div>
           <div className={styles.customizerTotal}><span>Precio de tu {customizingProduct.name}</span><strong>{currency.format(Number(customizingProduct.price) + selectedAddonTotal)}</strong></div>
-          <footer><button className={styles.customizerCancel} type="button" onClick={() => setCustomizingProduct(null)}>Cancelar</button><button className={styles.addButton} type="button" disabled={!requiredTwoGroupsReady} onClick={addCustomizedProduct}>Agregar al pedido <Plus size={15} /></button></footer>
+          <footer><button className={styles.customizerCancel} type="button" onClick={() => setCustomizingProduct(null)}>Cancelar</button><button className={styles.addButton} type="button" disabled={!customizerReady} onClick={addCustomizedProduct}>Agregar al pedido <Plus size={15} /></button></footer>
         </section>
       </div>}
       {isAuthOpen && <AuthModal user={session?.user} businessSlug={business?.slug} onAuthenticate={(nextSession) => { onAuthenticate(nextSession); setIsAuthOpen(false) }} onClose={() => setIsAuthOpen(false)} onSignOut={onSignOut} />}

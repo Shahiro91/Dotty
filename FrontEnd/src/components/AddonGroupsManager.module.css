@@ -1,0 +1,47 @@
+.manager { margin: 0 0 20px; padding: 16px 0; border-top: 1px solid #deded5; border-bottom: 1px solid #deded5; display: grid; gap: 12px; }
+.header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.header h2 { margin: 0 0 4px; font-size: 15px; }
+.header p { margin: 0; color: #6b726b; font-size: 11px; line-height: 1.45; }
+.hint { margin: 0; padding: 8px 10px; border-radius: 4px; background: #f6f3ea; color: #5f655e; font-size: 10px; line-height: 1.45; }
+.empty { margin: 0; color: #81877e; font-size: 11px; }
+.groups { display: grid; gap: 12px; }
+.group, .newGroup { padding: 12px; display: grid; gap: 10px; border: 1px solid #e1e1d9; border-radius: 6px; background: #fffefa; }
+.newGroup h3 { margin: 0; font-size: 13px; }
+.groupHeader { display: flex; align-items: center; gap: 6px; }
+.groupHeader > div { min-width: 0; flex: 1; display: grid; gap: 3px; }
+.groupHeader strong { font-size: 13px; color: #343b35; }
+.groupHeader span { color: #6b726b; font-size: 10px; }
+.groupForm { display: grid; gap: 10px; }
+.field { display: grid; gap: 5px; }
+.field label { color: #4b524d; font-size: 11px; font-weight: 750; }
+.field input, .field select, .optionRow input { width: 100%; min-height: 36px; padding: 7px 9px; border: 1px solid #d9dcd4; border-radius: 4px; background: white; color: #292e2b; font: inherit; font-size: 12px; }
+.check { display: flex; align-items: flex-start; gap: 8px; color: #4a514a; font-size: 11px; line-height: 1.4; }
+.check input { margin-top: 2px; accent-color: var(--store-primary, #c95031); }
+.options { margin: 0; padding: 0; list-style: none; display: grid; }
+.options li { border-top: 1px solid #ecece5; }
+.optionRow { min-height: 44px; display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto auto; align-items: center; gap: 8px; }
+.options .optionRow { grid-template-columns: minmax(0, 1.4fr) auto auto auto; }
+.optionName { overflow: hidden; color: #343b35; font-size: 12px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.optionPrice { color: var(--store-secondary, #58705e); font-size: 11px; font-weight: 800; }
+.optionFree { color: #8a8f87; font-size: 11px; }
+.actions { display: flex; align-items: center; gap: 6px; }
+.primary, .secondary { min-height: 36px; padding: 0 12px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; border-radius: 4px; cursor: pointer; font: inherit; font-size: 11px; font-weight: 800; white-space: nowrap; }
+.primary { border: 0; background: var(--store-primary, #c95031); color: white; }
+.secondary { width: fit-content; border: 1px dashed #b9bdb3; background: white; color: #4e5850; }
+.primary:disabled, .secondary:disabled { opacity: .55; cursor: not-allowed; }
+.link { min-height: 34px; padding: 0 8px; border: 0; background: transparent; color: #a34835; cursor: pointer; font: inherit; font-size: 11px; font-weight: 700; }
+.iconButton { width: 32px; height: 32px; padding: 0; display: grid; place-items: center; border: 1px solid #e0e1d9; border-radius: 4px; background: white; color: #4e5850; cursor: pointer; }
+.iconButton:disabled { opacity: .55; cursor: wait; }
+.switchRow { display: inline-flex; align-items: center; gap: 9px; flex: none; cursor: pointer; font-size: 11px; font-weight: 800; color: #4b524d; }
+.switchInput { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.switchTrack { position: relative; flex: none; width: 42px; height: 24px; border-radius: 999px; background: #c5c9c0; transition: background .15s; }
+.switchTrack::after { content: ''; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: white; box-shadow: 0 1px 3px rgba(0, 0, 0, .25); transition: transform .15s; }
+.switchInput:checked + .switchTrack { background: var(--store-secondary, #58705e); }
+.switchInput:checked + .switchTrack::after { transform: translateX(18px); }
+.switchInput:focus-visible + .switchTrack { outline: 2px solid var(--store-primary, #c95031); outline-offset: 2px; }
+
+@media (max-width: 640px) {
+  .header { flex-direction: column; }
+  .optionRow { grid-template-columns: 1fr 1fr; }
+  .options .optionRow { grid-template-columns: minmax(0, 1fr) auto auto auto; }
+}

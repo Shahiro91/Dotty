@@ -170,6 +170,7 @@
 .addonChoiceGroup { min-width: 0; margin: 0; padding: 0 0 10px; border: 0; }
 .addonChoiceGroup legend { padding: 10px 0 4px; color: var(--store-primary); font-size: 11px; font-weight: 800; }
 .requiredTwoHelp { display: block; padding-top: 6px; color: var(--store-primary); font-size: 10px; font-weight: 700; }
+.requiredTag { color: var(--store-primary); font-size: 10px; font-style: normal; font-weight: 700; }
 .addonChoice { min-height: 45px; display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; align-items: center; gap: 9px; border-top: 1px solid #ece9e1; color: #414942; cursor: pointer; font-size: 11px; }
 .addonChoice input { width: 15px; height: 15px; margin: 0; accent-color: var(--store-primary); }
 .addonChoice strong { color: var(--store-secondary); font-size: 10px; }
