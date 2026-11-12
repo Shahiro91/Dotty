@@ -1,4 +1,4 @@
-import { useEffect, useState, lazy, Suspense } from 'react'
+﻿import { useEffect, useState, lazy, Suspense } from 'react'
 import { ArrowRight, Award, Clock3, Flame, Gift, LoaderCircle, LogIn, MapPin, MessageCircle, Minus, Plus, Printer, ShoppingBag, Store, X } from 'lucide-react'
 import { apiRequest, apiUrl } from '../lib/api.js'
 import { getBusinessFontVariables } from '../lib/businessStyle.js'
@@ -520,7 +520,7 @@ function LocalStorefront({ slug, session, onAuthenticate, onSignOut, isPreview =
           </div>
         </div>
       </section>
-      {business.bonusPointsActiveToday && <div className={styles.bonusNotice}><Award size={16} /><span>Hoy sumás el doble de puntos en todos tus pedidos. Los puntos normales aparecen tachados.</span></div>}
+      {business.bonusPointsActiveToday && <div className={styles.bonusNotice}><Award size={16} /><span>Hoy sumás el doble de puntos en todos tus pedidos.</span></div>}
       {trackedOrder && <section className={`${styles.orderTrackingNotice} ${styles[`orderTracking_${trackedOrder.status}`] || ''}`} role="status">
         <div><strong>{orderTrackingCopy[trackedOrder.status]?.title || 'Estado del pedido'}</strong><p>Pedido #{trackedOrder.id} · {orderTrackingCopy[trackedOrder.status]?.message || ''}</p></div>
         <button type="button" aria-label="Ocultar seguimiento del pedido" onClick={() => { window.localStorage.removeItem(orderTrackingStorageKey); setTrackedOrderId(''); setTrackedOrder(null) }}><X size={17} /></button>

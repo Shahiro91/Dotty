@@ -42,7 +42,7 @@
 .loading { min-height: 100vh; display: flex; align-items: center; justify-content: center; gap: 10px; color: #5d655e; font-size: 13px; }
 .spinner { animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
-.board { margin-top: 22px; display: grid; grid-template-columns: repeat(4, minmax(250px, 1fr)); align-items: start; gap: 14px; overflow-x: auto; padding-bottom: 15px; }
+.board { margin-top: 22px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: start; gap: 14px; overflow-x: auto; padding-bottom: 15px; }
 .statsDashboard { margin-top: 20px; display: grid; gap: 13px; }
 .statsHeader { display: flex; align-items: end; justify-content: space-between; gap: 12px; }
 .statsHeader h2 { margin: 4px 0 0; color: #303a33; font-family: var(--business-heading-font, var(--serif)); font-size: 20px; text-transform: capitalize; }
@@ -383,7 +383,7 @@
   .statsRankings { grid-template-columns: 1fr; }
   .statsChart { height: 170px; gap: 3px; }
   .statsBarLabel { font-size: 8px; }
-  .board { grid-template-columns: repeat(3, minmax(255px, 82vw)); margin-top: 14px; }
+  .board { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 14px; }
   .formSection, .listSection { padding: 15px; }
   .twoFields { gap: 8px; }
   .categoryPageHeader, .categoryDetailHeader { align-items: flex-start; flex-direction: column; gap: 12px; }
@@ -446,3 +446,5 @@
 .referralFooter { padding: 14px 20px; border-top: 1px solid #ecece5; display: flex; justify-content: flex-end; }
 .referralFooter .primaryButton { margin-top: 0; }
 @media (max-width: 640px) { .referralHead { flex-wrap: wrap; } .switchRow { margin-left: 54px; } }
+
+@media (max-width: 600px) { .board { grid-template-columns: minmax(0, 1fr); } .columnScroll { max-height: none; } }
