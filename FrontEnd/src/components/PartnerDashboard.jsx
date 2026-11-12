@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { AlertCircle, ArrowLeft, ArrowUpRight, BarChart3, Check, ChevronDown, ChevronRight, CircleDollarSign, Copy, CreditCard, Eye, FileSpreadsheet, FolderOpen, History, ImagePlus, LoaderCircle, LogOut, Menu, MessageCircle, Package, Pencil, Plus, Printer, RefreshCw, Save, Sparkles, Store, ToggleLeft, ToggleRight, Trash2, Users, UserPlus, X } from 'lucide-react'
+import { AlertCircle, ArrowLeft, BarChart3, Check, ChevronDown, ChevronRight, CircleDollarSign, Copy, CreditCard, Eye, FileSpreadsheet, FolderOpen, History, ImagePlus, LoaderCircle, LogOut, Menu, MessageCircle, Package, Pencil, Plus, Printer, RefreshCw, Save, Sparkles, Store, ToggleLeft, ToggleRight, Trash2, Users, UserPlus, X } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 import { apiRequest } from '../lib/api.js'
 import { businessFontOptions, getBusinessFontVariables } from '../lib/businessStyle.js'
 import { optimizeImageFile } from '../lib/image.js'
 import { currency } from '../data/menu.js'
 import CatalogImport from './CatalogImport.jsx'
+import SupportButton from './SupportButton.jsx'
 import AddonGroupsManager from './AddonGroupsManager.jsx'
 import LocalStorefront from './LocalStorefront.jsx'
 import styles from './PartnerDashboard.module.css'
@@ -42,7 +43,7 @@ const orderStatuses = [
 ]
 
 const emptyProduct = { name: '', description: '', category: '', price: '', pointsPerUnit: '0', imageDataUrl: '', imageScale: 1, imagePositionX: 50, imagePositionY: 50 }
-const emptyReward = { name: '', description: '', imageDataUrl: '', rewardType: 'product', discountType: 'fixed', discountValue: '', pointsCost: '' }
+const emptyReward = { name: '', description: '', imageDataUrl: '', rewardType: 'product', discountType: 'fixed', discountScope: 'total', discountCategory: '', discountValue: '', pointsCost: '' }
 const openingDayLabels = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
 const openingDayNames = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
 
@@ -145,7 +146,13 @@ function PartnerDashboard({ token, user, onSignOut }) {
   const [currentTime, setCurrentTime] = useState(() => Date.now())
   const [isMobile, setIsMobile] = useState(() => window.matchMedia('(max-width: 900px)').matches)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
-  const [section, setSection] = useState(() => window.matchMedia('(max-width: 900px)').matches ? 'store' : 'orders')
+  const sectionStorageKey = `sabor-vivo-section-${user.id}`
+  const [section, setSection] = useState(() => {
+    const isMobileViewport = window.matchMedia('(max-width: 900px)').matches
+    const savedSection = window.sessionStorage.getItem(sectionStorageKey)
+    if (savedSection && sections.some((item) => item.id === savedSection) && !(isMobileViewport && savedSection === 'orders')) return savedSection
+    return isMobileViewport ? 'store' : 'orders'
+  })
   const [business, setBusiness] = useState(null)
   const [openingHoursSchedule, setOpeningHoursSchedule] = useState(null)
   const [categories, setCategories] = useState([])
@@ -179,6 +186,10 @@ function PartnerDashboard({ token, user, onSignOut }) {
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const cropDragRef = useRef(null)
+
+  useEffect(() => {
+    window.sessionStorage.setItem(sectionStorageKey, section)
+  }, [section, sectionStorageKey])
 
   useEffect(() => {
     const intervalId = window.setInterval(() => setCurrentTime(Date.now()), 60_000)
@@ -264,6 +275,35 @@ function PartnerDashboard({ token, user, onSignOut }) {
       .finally(() => { if (isCurrent) setStatisticsLoading(false) })
     return () => { isCurrent = false }
   }, [token, isLoading, billing?.requiresInitialPayment])
+
+  const busyOrderIdRef = useRef(null)
+  busyOrderIdRef.current = busyOrderId
+
+  useEffect(() => {
+    if (isLoading || billing?.requiresInitialPayment || billing?.status === 'suspended') return
+    let isCurrent = true
+    async function refreshOrders() {
+      if (document.hidden) return
+      try {
+        const result = await apiRequest('/partner/orders', { token })
+        // Evita pisar un cambio de estado en curso con datos anteriores.
+        if (!isCurrent || busyOrderIdRef.current !== null) return
+        setOrders(result.orders)
+        setShiftStartedAt(result.shiftStartedAt)
+        const customerResult = await apiRequest('/partner/customers', { token })
+        if (isCurrent) setCustomers(customerResult.customers)
+      } catch {
+        // El próximo ciclo vuelve a intentarlo.
+      }
+    }
+    const intervalId = window.setInterval(refreshOrders, 10_000)
+    document.addEventListener('visibilitychange', refreshOrders)
+    return () => {
+      isCurrent = false
+      window.clearInterval(intervalId)
+      document.removeEventListener('visibilitychange', refreshOrders)
+    }
+  }, [token, isLoading, billing?.requiresInitialPayment, billing?.status])
 
   async function refreshStatistics() {
     setStatisticsLoading(true)
@@ -541,9 +581,12 @@ function PartnerDashboard({ token, user, onSignOut }) {
     event.preventDefault()
     setIsSaving(true)
     setError('')
+    const isDiscount = rewardDraft.rewardType === 'discount'
     const body = {
       ...rewardDraft,
-      productId: rewardDraft.rewardType === 'product' && rewardDraft.productId ? Number(rewardDraft.productId) : null,
+      productId: (rewardDraft.rewardType === 'product' || (isDiscount && rewardDraft.discountScope === 'product')) && rewardDraft.productId ? Number(rewardDraft.productId) : null,
+      discountScope: isDiscount ? rewardDraft.discountScope || 'total' : 'total',
+      discountCategory: isDiscount && rewardDraft.discountScope === 'category' ? rewardDraft.discountCategory : '',
       discountValue: rewardDraft.rewardType === 'discount' ? Number(rewardDraft.discountValue) : 0,
       pointsCost: Number(rewardDraft.pointsCost),
     }
@@ -569,14 +612,16 @@ function PartnerDashboard({ token, user, onSignOut }) {
   }
 
   async function startNewShift() {
-    const pending = boardOrders.filter((order) => ['in_process', 'confirmed'].includes(order.status)).length
-    const warning = pending ? ` Tenés ${pending} pedido${pending === 1 ? '' : 's'} entrante${pending === 1 ? '' : 's'} o confirmado${pending === 1 ? '' : 's'} que también se van a quitar del tablero.` : ''
+    const pending = boardOrders.filter((order) => order.status === 'in_process').length
+    const confirmed = boardOrders.filter((order) => order.status === 'confirmed').length
+    const warning = `${pending ? ` Tenés ${pending} pedido${pending === 1 ? '' : 's'} entrante${pending === 1 ? '' : 's'} que se ${pending === 1 ? 'cancelará' : 'cancelarán'} automáticamente (se revierten los puntos y canjes).` : ''}${confirmed ? ` ${confirmed} confirmado${confirmed === 1 ? '' : 's'} también se ${confirmed === 1 ? 'quitará' : 'quitarán'} del tablero.` : ''}`
     if (!window.confirm(`¿Comenzar una nueva jornada? El tablero quedará vacío.${warning} Los pedidos siguen guardados en el historial.`)) return
     setIsStartingShift(true)
     setError('')
     try {
       const result = await apiRequest('/partner/orders/new-shift', { method: 'POST', token })
       setShiftStartedAt(result.shiftStartedAt)
+      if (result.cancelledOrderIds?.length) setOrders((current) => current.map((order) => result.cancelledOrderIds.includes(order.id) ? { ...order, status: 'cancelled' } : order))
       flash('Nueva jornada iniciada. Los pedidos anteriores están en el historial.')
     } catch (shiftError) { setError(shiftError.message) } finally { setIsStartingShift(false) }
   }
@@ -703,8 +748,8 @@ function PartnerDashboard({ token, user, onSignOut }) {
           <a className={styles.brand} href={`/local/${business.slug}`} target="_blank" rel="noreferrer">
             <span className={styles.brandMark}>{business.logoDataUrl ? <img src={business.logoDataUrl} alt="" /> : <Store size={18} />}</span>
             <span><strong>{business.name}</strong><small>Panel del local</small></span>
-            <ArrowUpRight className={styles.brandArrow} size={16} />
           </a>
+          <SupportButton token={token} />
           <button className={styles.mobileMenuToggle} type="button" aria-label={isMobileMenuOpen ? 'Cerrar menú' : 'Abrir menú'} aria-expanded={isMobileMenuOpen} onClick={() => setIsMobileMenuOpen((open) => !open)}>
             {isMobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
@@ -715,7 +760,7 @@ function PartnerDashboard({ token, user, onSignOut }) {
             <button key={id} className={`${styles.navItem} ${section === id ? styles.navActive : ''}`} type="button" aria-current={section === id ? 'page' : undefined} onClick={() => { setSection(id); setIsMobileMenuOpen(false) }}>
               <Icon size={17} /><span className={styles.navLabel}>{label}</span>
               {(id === 'bonus-points' || id === 'catalog-import') && <span className={styles.navVip}>VIP</span>}
-              {id === 'orders' && orders.filter((order) => order.status === 'in_process').length > 0 && <span className={styles.navCount}>{orders.filter((order) => order.status === 'in_process').length}</span>}
+              {id === 'orders' && boardOrders.filter((order) => order.status === 'in_process').length > 0 && <span className={styles.navCount}>{boardOrders.filter((order) => order.status === 'in_process').length}</span>}
             </button>
           ))}
         </nav>
@@ -925,8 +970,23 @@ function PartnerDashboard({ token, user, onSignOut }) {
         {section === 'rewards' && <div className={styles.managementGrid}>
           <form className={styles.formSection} onSubmit={saveReward}>
             <div className={styles.sectionHeading}><h2>{editingRewardId ? 'Editar canje' : 'Nuevo canje'}</h2><p>Define qué recompensa pueden obtener los clientes con puntos.</p></div>
-            <label className={styles.fieldLabel} htmlFor="reward-type">Tipo de canje</label><select className={styles.textInput} id="reward-type" value={rewardDraft.rewardType || 'product'} onChange={(event) => setRewardDraft({ ...rewardDraft, rewardType: event.target.value, category: '', productId: '', imageDataUrl: '', discountValue: '' })}><option value="product">Producto</option><option value="discount">Descuento sobre una compra</option></select>
-            {rewardDraft.rewardType === 'product' && <>
+            <label className={styles.fieldLabel} htmlFor="reward-type">Tipo de canje</label><select className={styles.textInput} id="reward-type" value={rewardDraft.rewardType || 'product'} onChange={(event) =>             setRewardDraft({ ...rewardDraft, rewardType: event.target.value, category: '', productId: '', imageDataUrl: '', discountValue: '', discountScope: 'total', discountCategory: '' })}><option value="product">Producto</option><option value="discount">Descuento sobre una compra</option></select>
+                        {rewardDraft.rewardType === 'discount' && <>
+                          <label className={styles.fieldLabel} htmlFor="reward-discount-scope">El descuento se aplica a</label>
+                          <select className={styles.textInput} id="reward-discount-scope" value={rewardDraft.discountScope || 'total'} onChange={(event) => setRewardDraft({ ...rewardDraft, discountScope: event.target.value, category: '', productId: '', discountCategory: '' })}>
+                            <option value="total">El total de la compra</option>
+                            <option value="product">Un producto específico</option>
+                            <option value="category">Una categoría</option>
+                          </select>
+                          {rewardDraft.discountScope === 'category' && <>
+                            <label className={styles.fieldLabel} htmlFor="reward-discount-category">Categoría con descuento</label>
+                            <select className={styles.textInput} id="reward-discount-category" value={rewardDraft.discountCategory || ''} onChange={(event) => setRewardDraft({ ...rewardDraft, discountCategory: event.target.value })} required>
+                              <option value="">Elegí una categoría</option>
+                              {categories.map((category) => <option key={category.name} value={category.name}>{category.name}</option>)}
+                            </select>
+                          </>}
+                        </>}
+                        {(rewardDraft.rewardType === 'product' || (rewardDraft.rewardType === 'discount' && rewardDraft.discountScope === 'product')) && <>
               <label className={styles.fieldLabel} htmlFor="reward-category">Categoría del producto</label>
               <select className={styles.textInput} id="reward-category" value={rewardDraft.category || ''} onChange={(event) => setRewardDraft({ ...rewardDraft, category: event.target.value, productId: '', imageDataUrl: '' })} required>
                 <option value="">Elegí una categoría</option>
@@ -944,17 +1004,17 @@ function PartnerDashboard({ token, user, onSignOut }) {
             {rewardDraft.rewardType === 'discount' && <>
               <label className={styles.fieldLabel} htmlFor="reward-discount-type">Tipo de descuento</label><select className={styles.textInput} id="reward-discount-type" value={rewardDraft.discountType || 'fixed'} onChange={(event) => setRewardDraft({ ...rewardDraft, discountType: event.target.value, discountValue: '' })}><option value="fixed">Monto fijo</option><option value="percentage">Porcentaje</option></select>
               <label className={styles.fieldLabel} htmlFor="reward-discount-value">{rewardDraft.discountType === 'percentage' ? 'Porcentaje' : 'Monto en pesos'}</label><input className={styles.textInput} id="reward-discount-value" type="number" min="1" max={rewardDraft.discountType === 'percentage' ? '100' : '100000000'} step="1" value={rewardDraft.discountValue} onChange={(event) => setRewardDraft({ ...rewardDraft, discountValue: event.target.value })} required />
-              <small className={styles.imageZoomHelp}>Se aplica sobre la compra al confirmar el pedido.</small>
+              <small className={styles.imageZoomHelp}>{rewardDraft.discountScope === 'product' ? 'Se aplica solo a ese producto cuando está en el pedido.' : rewardDraft.discountScope === 'category' ? 'Se aplica a todos los productos de esa categoría que estén en el pedido.' : 'Se aplica sobre la compra al confirmar el pedido.'}</small>
             </>}
             <label className={styles.fieldLabel} htmlFor="reward-image">Foto opcional</label><input className={styles.fileInput} id="reward-image" type="file" accept="image/*" onChange={(event) => selectImage(event, (image) => setRewardDraft((current) => ({ ...current, imageDataUrl: image })))} />
             {rewardDraft.imageDataUrl && <div className={styles.rewardPhotoPreview}><img src={rewardDraft.imageDataUrl} alt="Vista previa del canje" /><button type="button" aria-label="Quitar foto del canje" onClick={() => setRewardDraft((current) => ({ ...current, imageDataUrl: '' }))}><X size={15} /></button></div>}
             <label className={styles.fieldLabel} htmlFor="reward-cost">Puntos necesarios</label><input className={styles.textInput} id="reward-cost" type="number" min="1" step="1" value={rewardDraft.pointsCost} onChange={(event) => setRewardDraft({ ...rewardDraft, pointsCost: event.target.value })} required />
             <div className={styles.formActions}><button className={styles.primaryButton} type="submit" disabled={isSaving}>{isSaving ? 'Guardando...' : editingRewardId ? 'Guardar canje' : 'Agregar canje'}</button>{editingRewardId && <button className={styles.textButton} type="button" onClick={() => { setEditingRewardId(null); setRewardDraft(emptyReward) }}>Cancelar edición</button>}</div>
           </form>
-          <div className={styles.listSection}><div className={styles.sectionHeading}><h2>Canjes disponibles</h2><p>{rewards.length} opciones</p></div>{rewards.length === 0 ? <p className={styles.empty}>Todavía no configuraste canjes.</p> : rewards.map((reward) => { const linkedProduct = products.find((product) => String(product.id) === String(reward.productId)); return <article className={styles.rewardRow} key={reward.id}>{reward.imageDataUrl && <span className={styles.rewardThumb}><img src={reward.imageDataUrl} alt="" /></span>}<div className={styles.rewardPoints}>{reward.pointsCost}<small>pts</small></div><div className={styles.rowMain}><strong>{reward.name}</strong><span>{reward.rewardType === 'discount' ? `Descuento ${reward.discountType === 'percentage' ? `${reward.discountValue}%` : currency.format(reward.discountValue)} · ${reward.description || 'aplicable a una compra'}` : linkedProduct ? `Producto: ${linkedProduct.name} · ${reward.description || 'Canje por puntos'}` : reward.description || 'Producto'}</span></div><button className={styles.rowButton} type="button" onClick={() => startEditingReward(reward)}>Editar</button><button className={styles.deleteButton} type="button" aria-label={`Quitar ${reward.name}`} onClick={() => removeReward(reward.id)}><Trash2 size={16} /></button></article>})}</div>
+          <div className={styles.listSection}><div className={styles.sectionHeading}><h2>Canjes disponibles</h2><p>{rewards.length} opciones</p></div>{rewards.length === 0 ? <p className={styles.empty}>Todavía no configuraste canjes.</p> : rewards.map((reward) => { const linkedProduct = products.find((product) => String(product.id) === String(reward.productId)); return <article className={styles.rewardRow} key={reward.id}>{reward.imageDataUrl && <span className={styles.rewardThumb}><img src={reward.imageDataUrl} alt="" /></span>}<div className={styles.rewardPoints}>{reward.pointsCost}<small>pts</small></div><div className={styles.rowMain}><strong>{reward.name}</strong><span>{reward.rewardType === 'discount' ? `Descuento ${reward.discountType === 'percentage' ? `${reward.discountValue}%` : currency.format(reward.discountValue)} · ${reward.discountScope === 'product' ? `en ${linkedProduct?.name || 'un producto'}` : reward.discountScope === 'category' ? `en ${reward.discountCategory}` : 'en el total'} · ${reward.description || 'aplicable a una compra'}` : linkedProduct ? `Producto: ${linkedProduct.name} · ${reward.description || 'Canje por puntos'}` : reward.description || 'Producto'}</span></div><button className={styles.rowButton} type="button" onClick={() => startEditingReward(reward)}>Editar</button><button className={styles.deleteButton} type="button" aria-label={`Quitar ${reward.name}`} onClick={() => removeReward(reward.id)}><Trash2 size={16} /></button></article>})}</div>
         </div>}
 
-        {section === 'customers' && <section className={styles.formSection}><div className={styles.sectionHeading}><h2>Clientes del local</h2><p>Personas que hicieron al menos un pedido en tu local.</p></div>{customers.length === 0 ? <p className={styles.empty}>Todavía no hay clientes registrados.</p> : <div className={styles.tableWrap}><table className={styles.customerTable}><thead><tr><th>Nombre</th><th>Apellido</th><th>Celular</th></tr></thead><tbody>{customers.map((customer) => <tr key={customer.phone}><td>{customer.firstName}</td><td>{customer.lastName}</td><td><a href={`tel:${customer.phone}`}>{customer.phone}</a></td></tr>)}</tbody></table></div>}</section>}
+        {section === 'customers' && <section className={styles.formSection}><div className={styles.sectionHeading}><h2>Clientes del local</h2><p>Personas que hicieron al menos un pedido en tu local. Se muestran los datos del primer pedido y la primera dirección de entrega.</p></div>{customers.length === 0 ? <p className={styles.empty}>Todavía no hay clientes registrados.</p> : <div className={styles.tableWrap}><table className={styles.customerTable}><thead><tr><th>Nombre</th><th>Apellido</th><th>Celular</th><th>Dirección</th></tr></thead><tbody>{customers.map((customer) => <tr key={customer.phone}><td>{customer.firstName}</td><td>{customer.lastName}</td><td><a href={`tel:${customer.phone}`}>{customer.phone}</a></td><td>{customer.deliveryAddress || '—'}</td></tr>)}</tbody></table></div>}</section>}
 
         {section === 'referrals' && <section className={styles.formSection}>
           <div className={styles.referralCard}>
@@ -1101,6 +1161,8 @@ function OrderTicket({ order, businessName }) {
     {order.fulfillmentType && <p className={styles.ticketGap}><b>Entrega:</b> {isDelivery ? 'Delivery' : 'Retira en el local'}</p>}
     {isDelivery && <>
       <p><b>Dirección:</b> {order.deliveryAddress}</p>
+      {order.deliveryFloor && <p><b>Piso:</b> {order.deliveryFloor}</p>}
+      {order.deliveryApartment && <p><b>Depto:</b> {order.deliveryApartment}</p>}
       {order.deliveryReference && <p><b>Referencia:</b> {order.deliveryReference}</p>}
       <div className={styles.ticketQr}>
         <QRCodeSVG value={mapUrl} size={110} marginSize={1} />
@@ -1318,7 +1380,7 @@ function OrderHistory({ orders, onClose }) {
             <div><dt>Cliente</dt><dd>{selected.firstName} {selected.lastName}</dd></div>
             <div><dt>Teléfono</dt><dd><a href={`tel:${selected.phone}`}>{selected.phone}</a></dd></div>
             {selected.fulfillmentType && <div><dt>Entrega</dt><dd>{selected.fulfillmentType === 'delivery' ? 'Delivery' : 'Retira en el local'}</dd></div>}
-            {selected.deliveryAddress && <div><dt>Dirección</dt><dd>{selected.deliveryAddress}</dd></div>}
+            {selected.deliveryAddress && <div><dt>Dirección</dt><dd>{selected.deliveryAddress}{selected.deliveryFloor ? `, piso ${selected.deliveryFloor}` : ''}{selected.deliveryApartment ? `, depto ${selected.deliveryApartment}` : ''}</dd></div>}
             {selected.deliveryReference && <div><dt>Referencia</dt><dd>{selected.deliveryReference}</dd></div>}
             {selected.deliveryLat != null && <div><dt>Ubicación</dt><dd><a href={`https://www.google.com/maps?q=${selected.deliveryLat},${selected.deliveryLng}`} target="_blank" rel="noreferrer">Ver ubicación exacta</a></dd></div>}
             {selected.paymentMethod && <div><dt>Pago</dt><dd>{selected.paymentMethod === 'mercado_pago' ? 'Mercado Pago' : 'Efectivo'}{selected.cashPaymentAmount ? ` · paga con ${currency.format(selected.cashPaymentAmount)} (vuelto ${currency.format(selected.cashPaymentAmount - selected.total)})` : ''}</dd></div>}
@@ -1335,6 +1397,12 @@ function OrderHistory({ orders, onClose }) {
 
 function OrdersBoard({ orders, businessName, busyOrderId, onChangeStatus }) {
   const [printingOrderId, setPrintingOrderId] = useState(null)
+  const [expandedOrderId, setExpandedOrderId] = useState(null)
+
+  function toggleOrder(event, orderId) {
+    if (event.target.closest('a, button')) return
+    setExpandedOrderId((current) => (current === orderId ? null : orderId))
+  }
 
   useEffect(() => {
     const clearPrintingOrder = () => setPrintingOrderId(null)
@@ -1353,19 +1421,22 @@ function OrdersBoard({ orders, businessName, busyOrderId, onChangeStatus }) {
       const columnHasPrintingOrder = columnOrders.some((order) => order.id === printingOrderId)
       return <section className={`${styles.orderColumn} ${columnHasPrintingOrder ? styles.printingOrderColumn : ''}`} key={status.id}>
         <header className={styles.columnHeader}><h2>{status.label}</h2><span>{columnOrders.length}</span></header>
-        {columnOrders.length === 0 ? <p className={styles.columnEmpty}>Sin pedidos</p> : columnOrders.map((order) => (
-          <article className={`${styles.orderCard} ${printingOrderId === order.id ? styles.printingOrder : ''}`} key={order.id}>
+        {columnOrders.length === 0 ? <p className={styles.columnEmpty}>Sin pedidos</p> : columnOrders.map((order) => {
+          const collapsible = order.status !== 'in_process'
+          const showDetails = !collapsible || expandedOrderId === order.id
+          return (
+          <article className={`${styles.orderCard} ${collapsible ? styles.collapsibleOrder : ''} ${printingOrderId === order.id ? styles.printingOrder : ''}`} key={order.id} onClick={collapsible ? (event) => toggleOrder(event, order.id) : undefined}>
             <OrderTicket order={order} businessName={businessName} />
             <div className={styles.orderHeading}><strong>Pedido #{order.id}</strong><time>{new Intl.DateTimeFormat('es-AR', { hour: '2-digit', minute: '2-digit' }).format(new Date(order.createdAt))}</time></div>
             <p className={styles.customerName}>{order.firstName} {order.lastName}</p>
             <a className={styles.orderPhone} href={`tel:${order.phone}`}>{order.phone}</a>
             {order.publicCode && <p className={styles.orderPhone}>Código: {order.publicCode}</p>}
             {order.fulfillmentType === 'pickup' && <p className={styles.orderPhone}>🏪 Retira en el local</p>}
-            {order.deliveryAddress && <p className={styles.orderPhone}>🛵 Delivery: {order.deliveryAddress}{order.deliveryReference ? ` (${order.deliveryReference})` : ''}</p>}
+            {order.deliveryAddress && <p className={styles.orderPhone}>🛵 Delivery: {order.deliveryAddress}{order.deliveryFloor ? `, piso ${order.deliveryFloor}` : ''}{order.deliveryApartment ? `, depto ${order.deliveryApartment}` : ''}{order.deliveryReference ? ` (${order.deliveryReference})` : ''}</p>}
             {order.deliveryLat != null && <a className={styles.orderPhone} href={`https://www.google.com/maps?q=${order.deliveryLat},${order.deliveryLng}`} target="_blank" rel="noreferrer">Ver ubicación exacta</a>}
             {order.paymentMethod && <p className={styles.orderPhone}>💳 {order.paymentMethod === 'mercado_pago' ? 'Mercado Pago' : 'Efectivo'}{order.cashPaymentAmount ? ` · paga con ${currency.format(order.cashPaymentAmount)} (vuelto ${currency.format(order.cashPaymentAmount - order.total)})` : ''}</p>}
             {order.customerNotes && <p className={styles.orderPhone}>📝 {order.customerNotes}</p>}
-            <ul>{order.items.map((item, index) => <li key={`${item.id}-${index}`}><span>{item.quantity} x {item.name}{item.addOns?.length > 0 && <small>Agregados: {item.addOns.map((addon) => `${addon.name} (+${currency.format(addon.price)})`).join(', ')}</small>}{item.isReward && <small>Canje por {item.pointsSpent} puntos</small>}</span><strong>{currency.format(item.unitPrice * item.quantity)}</strong></li>)}</ul>
+            {showDetails && <ul>{order.items.map((item, index) => <li key={`${item.id}-${index}`}><span>{item.quantity} x {item.name}{item.addOns?.length > 0 && <small>Agregados: {item.addOns.map((addon) => `${addon.name} (+${currency.format(addon.price)})`).join(', ')}</small>}{item.isReward && <small>Canje por {item.pointsSpent} puntos</small>}</span><strong>{currency.format(item.unitPrice * item.quantity)}</strong></li>)}</ul>}
             {Number(order.discountAmount) > 0 && <>
               <div className={styles.orderTotal}><span>Subtotal</span><strong>{currency.format(order.subtotal || order.total)}</strong></div>
               <div className={styles.orderDiscount}><span>Descuento · {order.discountName} ({order.discountPointsSpent} pts)</span><strong>−{currency.format(order.discountAmount)}</strong></div>
@@ -1385,7 +1456,8 @@ function OrdersBoard({ orders, businessName, busyOrderId, onChangeStatus }) {
               {busyOrderId === order.id && <LoaderCircle size={16} className={styles.spinner} />}
             </div>
           </article>
-        ))}
+          )
+        })}
       </section>
     })}
   </div>

@@ -144,6 +144,12 @@
 .pickupInfo { margin: 0; font-weight: 600; color: var(--store-secondary); }
 .locationButton { padding: 8px 10px; border: 1px dashed var(--store-secondary); border-radius: 4px; background: transparent; color: var(--store-secondary); cursor: pointer; font: inherit; font-size: 11px; font-weight: 700; }
 .locationButton:disabled { opacity: .6; cursor: wait; }
+.floorApartmentRow { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.discountWarning { margin: 6px 0 0; color: #a1442f; font-size: 11px; line-height: 1.4; }
+.rewardSuggestion { margin: 8px 0; padding: 9px 10px; display: flex; align-items: center; gap: 8px; border: 1px dashed var(--store-secondary); border-radius: 6px; background: #fff8e8; color: #5b4a17; font-size: 11px; line-height: 1.4; }
+.rewardSuggestion svg { flex: 0 0 auto; }
+.rewardSuggestion span { flex: 1; min-width: 0; }
+.rewardSuggestion button { flex: 0 0 auto; padding: 6px 10px; border: 0; border-radius: 4px; background: var(--store-secondary); color: white; cursor: pointer; font: inherit; font-size: 11px; font-weight: 700; }
 .checkout { width: 100%; min-height: 39px; margin-top: 13px; display: flex; align-items: center; justify-content: center; gap: 7px; border: 0; border-radius: 4px; background: var(--store-primary); color: white; cursor: pointer; font: inherit; font-size: 11px; font-weight: 800; }
 .checkout:hover { background: color-mix(in srgb, var(--store-primary), black 16%); }
 .checkout:disabled { opacity: .55; cursor: not-allowed; }

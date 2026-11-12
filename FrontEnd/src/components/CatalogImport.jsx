@@ -3,37 +3,7 @@ import { AlertCircle, Check, Download, FileSpreadsheet, LoaderCircle, Upload, X 
 import { apiRequest } from '../lib/api.js'
 import styles from './CatalogImport.module.css'
 
-function normalizeHeader(value) {
-  return String(value ?? '').trim().toLocaleLowerCase('es').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-}
-
-function readSheet(workbook, sheetName, XLSX) {
-  const sheet = workbook.Sheets[sheetName]
-  if (!sheet) return []
-  const [headerRow = [], ...rows] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', blankrows: false })
-  const headers = headerRow.map(normalizeHeader)
-  return rows.map((row, index) => ({
-    rowNumber: index + 2,
-    values: Object.fromEntries(headers.map((header, column) => [header, row[column] ?? ''])),
-  })).filter(({ values }) => Object.values(values).some((value) => String(value).trim() !== ''))
-}
-
-function parseInteger(value, { optional = false } = {}) {
-  if (optional && (value === '' || value === null || value === undefined)) return 0
-  if (typeof value === 'number') return Number.isSafeInteger(value) ? value : NaN
-  const normalized = String(value ?? '').trim().replace(/\s/g, '').replace(/\./g, '').replace(',', '.')
-  if (!normalized) return optional ? 0 : NaN
-  const parsed = Number(normalized)
-  return Number.isSafeInteger(parsed) ? parsed : NaN
-}
-
-function firstValue(values, headers) {
-  for (const header of headers) {
-    const value = values[header]
-    if (value !== undefined && value !== null && String(value).trim() !== '') return value
-  }
-  return ''
-}
+import { parseWorkbook } from '../lib/catalogSheetParser.js'
 
 async function makeTemplate() {
   const XLSX = await import('@e965/xlsx')
@@ -50,64 +20,10 @@ async function makeTemplate() {
   XLSX.writeFile(workbook, 'plantilla-catalogo-dotty.xlsx')
 }
 
-function parseWorkbook(workbook, XLSX) {
-  const errors = []
-  const categories = []
-  const products = []
-  const rewards = []
-
-  for (const row of readSheet(workbook, 'Categorías', XLSX)) {
-    const name = String(firstValue(row.values, ['nombre', 'categoria'])).trim()
-    if (!name || name.length > 60) errors.push(`Categorías, fila ${row.rowNumber}: completá un nombre de hasta 60 caracteres.`)
-    else categories.push(name)
-  }
-
-  for (const row of readSheet(workbook, 'Productos', XLSX)) {
-    const name = String(firstValue(row.values, ['nombre', 'producto'])).trim()
-    const category = String(firstValue(row.values, ['categoria', 'categoria del producto'])).trim() || 'Otros'
-    const description = String(firstValue(row.values, ['descripcion'])).trim()
-    const price = parseInteger(firstValue(row.values, ['precio', 'price']))
-    const pointsPerUnit = parseInteger(firstValue(row.values, ['puntos por unidad', 'puntos por producto', 'puntos']), { optional: true })
-    if (!name && !price) continue
-    if (!name || name.length > 100) errors.push(`Productos, fila ${row.rowNumber}: completá un nombre de hasta 100 caracteres.`)
-    else if (!category || category.length > 60) errors.push(`Productos, fila ${row.rowNumber}: indicá una categoría de hasta 60 caracteres.`)
-    else if (description.length > 500) errors.push(`Productos, fila ${row.rowNumber}: la descripción supera los 500 caracteres.`)
-    else if (!Number.isSafeInteger(price) || price < 1 || price > 100_000_000) errors.push(`Productos, fila ${row.rowNumber}: el precio debe ser un entero positivo.`)
-    else if (!Number.isSafeInteger(pointsPerUnit) || pointsPerUnit < 0 || pointsPerUnit > 1_000_000) errors.push(`Productos, fila ${row.rowNumber}: los puntos deben ser un entero igual o mayor a cero.`)
-    else products.push({ name, category, description, price, pointsPerUnit })
-  }
-
-  for (const row of readSheet(workbook, 'Canjes', XLSX)) {
-    const name = String(firstValue(row.values, ['nombre', 'canje', 'recompensa'])).trim()
-    const description = String(firstValue(row.values, ['descripcion'])).trim()
-    const pointsCost = parseInteger(firstValue(row.values, ['puntos necesarios', 'puntos requeridos', 'costo en puntos', 'puntos']))
-    const rawRewardType = normalizeHeader(firstValue(row.values, ['tipo de canje', 'tipo']))
-    const rewardType = !rawRewardType || rawRewardType === 'producto' ? 'product' : rawRewardType === 'descuento' ? 'discount' : rawRewardType
-    const productName = String(firstValue(row.values, ['producto asociado', 'producto'])).trim()
-    const productCategory = String(firstValue(row.values, ['categoria del producto', 'categoria'])).trim()
-    const rawDiscountType = normalizeHeader(firstValue(row.values, ['tipo de descuento']))
-    const discountType = !rawDiscountType || rawDiscountType === 'fijo' ? 'fixed' : rawDiscountType === 'porcentaje' ? 'percentage' : rawDiscountType
-    const discountValue = parseInteger(firstValue(row.values, ['valor de descuento', 'descuento']), { optional: true })
-    if (!name && !pointsCost) continue
-    if (!name || name.length > 100) errors.push(`Canjes, fila ${row.rowNumber}: completá un nombre de hasta 100 caracteres.`)
-    else if (description.length > 500) errors.push(`Canjes, fila ${row.rowNumber}: la descripción supera los 500 caracteres.`)
-    else if (!Number.isSafeInteger(pointsCost) || pointsCost < 1 || pointsCost > 1_000_000) errors.push(`Canjes, fila ${row.rowNumber}: los puntos necesarios deben ser un entero positivo.`)
-    else if (!['product', 'discount'].includes(rewardType)) errors.push(`Canjes, fila ${row.rowNumber}: el tipo debe ser producto o descuento.`)
-    else if (rewardType === 'product' && (!productName || !productCategory)) errors.push(`Canjes, fila ${row.rowNumber}: indicá el producto asociado y su categoría.`)
-    else if (!['fixed', 'percentage'].includes(discountType)) errors.push(`Canjes, fila ${row.rowNumber}: el descuento debe ser fijo o porcentaje.`)
-    else if (rewardType === 'discount' && (!Number.isSafeInteger(discountValue) || discountValue < 1 || (discountType === 'percentage' && discountValue > 100) || (discountType === 'fixed' && discountValue > 100_000_000))) errors.push(`Canjes, fila ${row.rowNumber}: completá un valor de descuento válido.`)
-    else rewards.push({ name, description, rewardType, productName, productCategory, discountType, discountValue, pointsCost })
-  }
-
-  const allCategories = [...new Map([...categories, ...products.map((product) => product.category)]
-    .map((name) => [name.toLocaleLowerCase('es'), name])).values()]
-  if (!products.length && !rewards.length && !allCategories.length) errors.push('El archivo no contiene filas para importar.')
-  return { preview: { categories: allCategories, products, rewards }, errors }
-}
-
 function CatalogImport({ token, plan, onImported }) {
   const [preview, setPreview] = useState(null)
   const [errors, setErrors] = useState([])
+  const [warnings, setWarnings] = useState([])
   const [fileName, setFileName] = useState('')
   const [isReading, setIsReading] = useState(false)
   const [isImporting, setIsImporting] = useState(false)
@@ -119,6 +35,7 @@ function CatalogImport({ token, plan, onImported }) {
     if (!file) return
     setPreview(null)
     setErrors([])
+    setWarnings([])
     setMessage('')
     setFileName(file.name)
     if (file.size > 5 * 1024 * 1024) {
@@ -132,8 +49,9 @@ function CatalogImport({ token, plan, onImported }) {
       const result = parseWorkbook(workbook, XLSX)
       setPreview(result.preview)
       setErrors(result.errors)
+      setWarnings(result.warnings)
     } catch {
-      setErrors(['No se pudo leer el archivo. Usá la plantilla XLSX descargable.'])
+      setErrors(['No se pudo leer el archivo. Probá con un Excel (.xlsx, .xls) o CSV.'])
     } finally {
       setIsReading(false)
     }
@@ -149,6 +67,7 @@ function CatalogImport({ token, plan, onImported }) {
       setMessage(`Importación lista: ${result.categoriesCreated} categorías nuevas, ${result.productsCreated} productos nuevos y ${result.productsUpdated} actualizados, ${result.rewardsCreated} canjes nuevos y ${result.rewardsUpdated} actualizados.`)
       setPreview(null)
       setErrors([])
+      setWarnings([])
       setFileName('')
     } catch (importError) {
       setErrors([importError.message])
@@ -174,17 +93,20 @@ function CatalogImport({ token, plan, onImported }) {
     </header>
     <div className={styles.instructions}>
       <strong>Formato del archivo</strong>
-      <span>Usá las hojas Categorías, Productos y Canjes. Las categorías de los productos también se agregan automáticamente.</span>
+      <span>Sirve cualquier planilla (Excel o CSV) con una fila de títulos y una columna "Nombre". Detectamos solas las columnas de precio, categoría, descripción y puntos.</span>
+      <span>Lo que falte se completa con valores por defecto (categoría "Otros", 0 puntos) y lo podés editar después. Las hojas llamadas "Canjes" se leen como canjes.</span>
       <span>Si ya existe un producto o canje con el mismo nombre, se actualizarán sus datos en lugar de duplicarlo.</span>
     </div>
     <label className={styles.filePicker}>
-      <input type="file" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" onChange={selectWorkbook} />
+      <input type="file" accept=".xlsx,.xls,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" onChange={selectWorkbook} />
       {isReading ? <LoaderCircle size={20} className={styles.spinner} /> : <Upload size={20} />}
-      <span><strong>{isReading ? 'Leyendo archivo...' : fileName || 'Elegir archivo Excel'}</strong><small>Formato .xlsx o .xls · Máximo 5 MB</small></span>
+      <span><strong>{isReading ? 'Leyendo archivo...' : fileName || 'Elegir archivo Excel'}</strong><small>Formato .xlsx, .xls o .csv · Máximo 5 MB</small></span>
     </label>
 
     {message && <p className={styles.success} role="status"><Check size={16} /> {message}</p>}
     {errors.length > 0 && <div className={styles.errorList} role="alert"><strong><AlertCircle size={15} /> Corregí estos datos antes de importar</strong>{errors.slice(0, 8).map((error) => <span key={error}>{error}</span>)}{errors.length > 8 && <small>Y {errors.length - 8} errores más.</small>}</div>}
+
+    {warnings.length > 0 && <div className={styles.errorList} role="status"><strong><AlertCircle size={15} /> Revisá estos datos después de importar</strong>{warnings.slice(0, 8).map((warning) => <span key={warning}>{warning}</span>)}{warnings.length > 8 && <small>Y {warnings.length - 8} avisos más.</small>}</div>}
 
     {preview && <section className={styles.preview}>
       <header className={styles.previewHeader}><div><h3>Vista previa</h3><p>{preview.categories.length} categorías · {preview.products.length} productos · {preview.rewards.length} canjes</p></div></header>

@@ -1,0 +1,78 @@
+import { Router } from 'express'
+import { authenticate } from '../../middleware/authenticate.js'
+import { requireCustomer, requirePartner, requirePartnerBilling } from '../../middleware/authorize.js'
+import { hasDoublePointsToday } from './business.rules.js'
+import { getPlan, getReferralSetting, setBonusDays, setReferrals, updateBusiness, updateOption } from './partner-business.repository.js'
+import { readBusinessInput, readBusinessOption } from './partner-business.schema.js'
+import { createReferralCode, loadOverview } from './partner-business.service.js'
+
+const router = Router()
+router.get('/partner/overview', authenticate, requirePartnerBilling, async (req, res, next) => {
+  try {
+    const overview = await loadOverview(req.businessId)
+    if (!overview) return res.status(404).json({ error: 'No se encontró el local asociado.' })
+    res.json(overview)
+  } catch (error) { next(error) }
+})
+
+router.patch('/partner/bonus-days', authenticate, requirePartner, async (req, res, next) => {
+  try {
+    const business = await getPlan(req.businessId)
+    if (!business) return res.status(404).json({ error: 'No se encontró el local asociado.' })
+    if (business.plan !== 'vip') return res.status(403).json({ error: 'La bonificación de puntos dobles es exclusiva del Plan VIP.' })
+    const days = req.body?.days
+    if (!Array.isArray(days) || days.length > 7
+      || days.some((day) => !Number.isInteger(day) || day < 0 || day > 6)
+      || new Set(days).size !== days.length) {
+      return res.status(400).json({ error: 'Elegí días válidos para la bonificación.' })
+    }
+    const bonusPointsDays = await setBonusDays(req.businessId, days)
+    res.json({ bonusPointsDays, bonusPointsActiveToday: hasDoublePointsToday('vip', bonusPointsDays) })
+  } catch (error) { next(error) }
+})
+
+router.patch('/partner/referrals', authenticate, requirePartner, async (req, res, next) => {
+  const enabled = req.body?.enabled
+  const points = Number(req.body?.points)
+  if (typeof enabled !== 'boolean' || !Number.isInteger(points) || points < 0 || points > 100_000
+    || (enabled && points < 1)) {
+    return res.status(400).json({ error: 'Ingresá una cantidad de puntos válida (mayor a 0) para el programa de invitados.' })
+  }
+  try {
+    res.json(await setReferrals(req.businessId, enabled, points))
+  } catch (error) { next(error) }
+})
+
+router.get('/public/businesses/:slug/referral-code', authenticate, requireCustomer, async (req, res, next) => {
+  try {
+    const business = await getReferralSetting(req.params.slug)
+    if (!business) return res.status(404).json({ error: 'No encontramos ese local.' })
+    if (!business.referral_enabled) return res.json({ code: null })
+    const code = await createReferralCode(req.customerId)
+    if (code) return res.json({ code })
+    res.status(500).json({ error: 'No pudimos generar tu código de invitación.' })
+  } catch (error) { next(error) }
+})
+
+router.patch('/partner/business', authenticate, requirePartner, async (req, res, next) => {
+  const input = readBusinessInput(req.body)
+  if (!input) return res.status(400).json({ error: 'Revisá el perfil, cargá un banner válido y verificá sus opciones visuales.' })
+  try {
+    res.json({ business: await updateBusiness(req.businessId, input) })
+  } catch (error) {
+    if (error.status === 409) return res.status(409).json({ error: error.message })
+    next(error)
+  }
+})
+
+router.patch('/partner/business/options', authenticate, requirePartner, async (req, res, next) => {
+  const input = readBusinessOption(req.body)
+  if (!input) return res.status(400).json({ error: 'Elegí una opción válida para actualizar.' })
+  try {
+    const business = await updateOption(req.businessId, input.field, input.column, input.value)
+    if (!business) return res.status(404).json({ error: 'No se encontró el local asociado.' })
+    res.json({ business })
+  } catch (error) { next(error) }
+})
+
+export { router as partnerBusinessRoutes }

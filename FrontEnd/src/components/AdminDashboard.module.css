@@ -36,6 +36,10 @@
 .approveButton:hover { background: var(--tomato-dark); }
 .contactButton:hover, .rejectButton:hover { border-color: #e7c7b3; color: var(--tomato); }
 .rejectButton { width: 36px; padding: 0; color: #963c2f; }
+.tabs { display: flex; gap: 6px; padding: 12px 24px 0; border-bottom: 1px solid var(--line); }
+.tabs button { display: inline-flex; align-items: center; gap: 6px; padding: 9px 14px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--muted); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+.tabs .tabActive { border-bottom-color: var(--tomato); color: var(--ink); }
+.tabCount { min-width: 18px; padding: 1px 5px; border-radius: 9px; background: var(--tomato); color: #fff; font-size: 10px; text-align: center; }
 .actions button:disabled { opacity: .55; cursor: wait; }
 .loading, .empty { min-height: 180px; display: flex; align-items: center; justify-content: center; gap: 9px; color: var(--muted); font-size: 13px; }
 .error { margin: 12px 22px 0; color: #a83224; font-size: 12px; }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, lazy, Suspense } from 'react'
 import { ArrowRight, Award, Clock3, Flame, Gift, LoaderCircle, LogIn, MapPin, MessageCircle, Minus, Plus, Printer, ShoppingBag, Store, X } from 'lucide-react'
 import { apiRequest, apiUrl } from '../lib/api.js'
 import { getBusinessFontVariables } from '../lib/businessStyle.js'
@@ -6,7 +6,24 @@ import { currency } from '../data/menu.js'
 import AuthModal from './AuthModal.jsx'
 import styles from './LocalStorefront.module.css'
 
+const LocationPicker = lazy(() => import('./LocationPicker.jsx'))
+
 const paymentLabels = { mercado_pago: 'Mercado Pago', cash: 'Efectivo' }
+function calculateCartDiscount(reward, cart) {
+  const lineTotal = (item) => Number(item.price) * item.quantity
+  const scope = reward.discountScope || 'total'
+  const eligible = cart.reduce((sum, item) => {
+    if (scope === 'total') return sum + lineTotal(item)
+    if (scope === 'category') return item.category === reward.discountCategory ? sum + lineTotal(item) : sum
+    if (item.partProducts?.length) {
+      return sum + item.partProducts.filter((part) => String(part.id) === String(reward.productId)).reduce((partSum, part) => partSum + part.price, 0) * item.quantity
+    }
+    return String(item.id) === String(reward.productId) ? sum + lineTotal(item) : sum
+  }, 0)
+  return reward.discountType === 'percentage'
+    ? Math.round(eligible * Number(reward.discountValue) / 100)
+    : Math.min(eligible, Number(reward.discountValue))
+}
 const fulfillmentLabel = (order) => order.fulfillmentType === 'delivery' ? `Delivery - ${order.deliveryAddress}` : 'Retira en el local'
 const formatOrderDate = (value) => new Intl.DateTimeFormat('es-AR', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Argentina/Buenos_Aires' }).format(new Date(value))
 const orderTrackingCopy = {
@@ -52,7 +69,7 @@ function buildWhatsappMessage(order, user, business) {
     '',
     `*Pedido:* #${order.id} / ${order.publicCode}`,
     `*Fecha:* ${datePart} - ${timePart}hs`,
-    `*Nombre:* ${user.firstName} ${user.lastName}`.trim(),
+    `*Nombre:* ${order.customerFirstName} ${order.customerLastName}`.trim(),
     `*Teléfono:* ${user.phone}`,
     '',
     `*Forma de pago:* ${paymentLabels[order.paymentMethod]}`,
@@ -60,7 +77,7 @@ function buildWhatsappMessage(order, user, business) {
     `*Total:* ${money(order.total)}`,
     '',
     `*Entrega:* ${isDelivery ? 'Delivery' : 'Retira en el local'}`,
-    ...(isDelivery ? [`*Dirección:* ${order.deliveryAddress}`, ...(order.deliveryReference ? [`*Referencia:* ${order.deliveryReference}`] : []), `*Ubicación${order.deliveryLat != null ? ' exacta' : ''}:* ${mapUrl}`] : business.address ? [`*Retira en:* ${business.address}`] : []),
+    ...(isDelivery ? [`*Dirección:* ${order.deliveryAddress}`, ...(order.deliveryFloor ? [`*Piso:* ${order.deliveryFloor}`] : []), ...(order.deliveryApartment ? [`*Depto:* ${order.deliveryApartment}`] : []), ...(order.deliveryReference ? [`*Referencia:* ${order.deliveryReference}`] : []), `*Ubicación${order.deliveryLat != null ? ' exacta' : ''}:* ${mapUrl}`] : business.address ? [`*Retira en:* ${business.address}`] : []),
     ...(order.customerNotes ? [`*Aclaraciones:* ${order.customerNotes}`] : []),
     '',
     '_Detalle del pedido_',
@@ -93,8 +110,12 @@ function LocalStorefront({ slug, session, onAuthenticate, onSignOut, isPreview =
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [deliveryAddress, setDeliveryAddress] = useState(() => window.localStorage.getItem('sabor-vivo-address') || '')
+  const [customerFirstName, setCustomerFirstName] = useState(() => window.localStorage.getItem('sabor-vivo-first-name') || session?.user?.firstName || '')
+  const [customerLastName, setCustomerLastName] = useState(() => window.localStorage.getItem('sabor-vivo-last-name') || session?.user?.lastName || '')
   const [fulfillmentType, setFulfillmentType] = useState('')
   const [deliveryReference, setDeliveryReference] = useState('')
+  const [deliveryFloor, setDeliveryFloor] = useState('')
+  const [deliveryApartment, setDeliveryApartment] = useState('')
   const [coordinates, setCoordinates] = useState(null)
   const [isLocating, setIsLocating] = useState(false)
   const [cashAmount, setCashAmount] = useState('')
@@ -238,6 +259,7 @@ function LocalStorefront({ slug, session, onAuthenticate, onSignOut, isPreview =
       basePrice: totalPrice,
       pointsPerUnit: totalPoints,
       partProductIds,
+      partProducts: selected.map((part) => ({ id: part.id, price: Number(part.price) })),
       partNames: selected.map((part) => part.name),
       selectedAddOns: [],
       cartKey,
@@ -262,15 +284,20 @@ function LocalStorefront({ slug, session, onAuthenticate, onSignOut, isPreview =
   const selectedDiscountReward = selectedReward?.rewardType === 'discount' ? selectedReward : null
   const selectedProductReward = selectedReward?.rewardType === 'product' && selectedReward.productId ? selectedReward : null
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0) + (selectedProductReward ? 1 : 0)
-  const discountAmount = selectedDiscountReward
-    ? selectedDiscountReward.discountType === 'percentage'
-      ? Math.round(cartTotal * Number(selectedDiscountReward.discountValue) / 100)
-      : Math.min(cartTotal, Number(selectedDiscountReward.discountValue))
-    : 0
-  const finalTotal = cartTotal - discountAmount
-  const pointsMultiplier = business?.bonusPointsActiveToday ? 2 : 1
+  const discountAmount = selectedDiscountReward ? calculateCartDiscount(selectedDiscountReward, cart) : 0
+  const discountNotApplicable = Boolean(selectedDiscountReward) && discountAmount === 0
   const sortedRewardCosts = [...rewards].map((reward) => reward.pointsCost).sort((a, b) => a - b)
   const userPoints = isPreview ? Math.round((sortedRewardCosts[0] || 100) / 2) : Number(session?.user?.points || 0)
+  const isCustomer = !isPreview && session?.user?.role === 'customer'
+  const suggestedDiscount = isCustomer && !selectedReward
+    ? rewards
+      .filter((reward) => reward.rewardType === 'discount' && reward.discountScope !== 'total' && reward.pointsCost <= userPoints)
+      .map((reward) => ({ reward, saving: calculateCartDiscount(reward, cart) }))
+      .filter((option) => option.saving > 0)
+      .sort((a, b) => b.saving - a.saving)[0]
+    : null
+  const finalTotal = cartTotal - discountAmount
+  const pointsMultiplier = business?.bonusPointsActiveToday ? 2 : 1
   const nextReward = [...rewards].sort((a, b) => a.pointsCost - b.pointsCost).find((reward) => reward.pointsCost > userPoints)
   const pointsTotal = cart.reduce((sum, item) => sum + item.pointsPerUnit * item.quantity, 0) * pointsMultiplier
   useEffect(() => {
@@ -353,6 +380,7 @@ function LocalStorefront({ slug, session, onAuthenticate, onSignOut, isPreview =
       return
     }
     if (!cart.length && !selectedProductReward) return
+    if (!customerFirstName.trim()) { setError('Ingresá tu nombre para el pedido.'); return }
     if (!fulfillmentType) { setError('Elegí si querés delivery o retirar en el local.'); return }
     if (fulfillmentType === 'delivery' && !deliveryAddress.trim()) { setError('Ingresá la dirección de entrega.'); return }
     const cashPaymentAmount = paymentMethod === 'cash' && cashAmount ? Number(cashAmount) : null
@@ -369,8 +397,12 @@ function LocalStorefront({ slug, session, onAuthenticate, onSignOut, isPreview =
           items: cart.map((item) => ({ id: item.id, quantity: item.quantity, addonIds: (item.selectedAddOns || []).map((addon) => addon.id), ...(item.partProductIds ? { partProductIds: item.partProductIds } : {}) })),
           discountRewardId: selectedDiscountReward?.id ?? null,
           productRewardId: selectedProductReward?.id ?? null,
+          customerFirstName,
+          customerLastName,
           deliveryAddress,
           deliveryReference,
+          deliveryFloor,
+          deliveryApartment,
           deliveryLat: coordinates?.lat ?? null,
           deliveryLng: coordinates?.lng ?? null,
           cashPaymentAmount,
@@ -385,12 +417,16 @@ function LocalStorefront({ slug, session, onAuthenticate, onSignOut, isPreview =
       setTrackedOrderId(String(result.order.id))
       setTrackedOrder({ id: result.order.id, status: 'in_process' })
       if (fulfillmentType === 'delivery') window.localStorage.setItem('sabor-vivo-address', deliveryAddress.trim())
+      window.localStorage.setItem('sabor-vivo-first-name', customerFirstName.trim())
+      window.localStorage.setItem('sabor-vivo-last-name', customerLastName.trim())
       onAuthenticate({ ...session, user: result.user })
       setCart([])
       setIsCartOpen(false)
       setSelectedRewardId(null)
       setCustomerNotes('')
       setDeliveryReference('')
+      setDeliveryFloor('')
+      setDeliveryApartment('')
       setCashAmount('')
       if (business.whatsapp) {
         const phone = business.whatsapp.replace(/\D/g, '')
@@ -536,7 +572,7 @@ function LocalStorefront({ slug, session, onAuthenticate, onSignOut, isPreview =
               const isRewardSelected = String(selectedRewardId) === String(reward.id)
               return <article className={styles.reward} key={reward.id}>
                 {(reward.imageDataUrl || reward.productImageDataUrl) && <img className={styles.rewardImage} src={reward.imageDataUrl || reward.productImageDataUrl} alt="" />}
-                {reward.rewardType === 'discount' && <span className={styles.rewardTypeTag}>{reward.discountType === 'percentage' ? `${reward.discountValue}% de descuento` : `${currency.format(reward.discountValue)} de descuento`}</span>}
+                {reward.rewardType === 'discount' && <span className={styles.rewardTypeTag}>{reward.discountType === 'percentage' ? `${reward.discountValue}% de descuento` : `${currency.format(reward.discountValue)} de descuento`}{reward.discountScope === 'product' ? ` en ${reward.productName}` : reward.discountScope === 'category' ? ` en ${reward.discountCategory}` : ''}</span>}
                 {reward.rewardType === 'product' && reward.productId && <span className={styles.rewardTypeTag}>Producto: {reward.productName}</span>}
                 <span className={styles.rewardCost}><Award size={15} /> {reward.pointsCost} pts</span><h3>{reward.name}</h3><p>{reward.rewardType === 'product' && reward.productId ? `${reward.productName} · ${currency.format(reward.productPrice)}` : reward.description}</p>
                 <button className={styles.redeemButton} type="button" aria-pressed={reward.productId || reward.rewardType === 'discount' ? isRewardSelected : undefined} disabled={isPreview || redeemingId === reward.id} onClick={() => redeemReward(reward)}>
@@ -560,17 +596,33 @@ function LocalStorefront({ slug, session, onAuthenticate, onSignOut, isPreview =
             {cart.length > 0 && <ul className={styles.cartList}>{cart.map((item) => <li key={item.cartKey || item.id}><span>{item.quantity} × {item.name}{item.selectedAddOns?.length > 0 && <small>Agregados: {item.selectedAddOns.map((addon) => `${addon.name} (+${currency.format(addon.price)})`).join(', ')}</small>}</span><strong>{currency.format(item.price * item.quantity)}</strong><div className={styles.cartLineQuantity}><button type="button" aria-label={`Quitar una unidad de ${item.name}`} onClick={() => changeQuantity(item, -1)}><Minus size={12} /></button><span>{item.quantity}</span><button type="button" aria-label={`Agregar una unidad de ${item.name}`} onClick={() => changeQuantity(item, 1)}><Plus size={12} /></button></div></li>)}</ul>}
             {selectedProductReward && <div className={styles.productRewardLine}>{selectedProductReward.productImageDataUrl && <img src={selectedProductReward.productImageDataUrl} alt="" />}<span>1 × {selectedProductReward.productName}<small>Canje por {selectedProductReward.pointsCost} puntos</small></span><strong>$0</strong><button type="button" aria-label="Quitar producto de canje" onClick={() => setSelectedRewardId(null)}><X size={13} /></button></div>}
             <div className={styles.total}><span>Subtotal</span><strong>{currency.format(cartTotal)}</strong></div>
+            {suggestedDiscount && <div className={styles.rewardSuggestion}>
+              <Gift size={16} />
+              <span>¡Podés canjear <b>{suggestedDiscount.reward.name}</b> ({suggestedDiscount.reward.pointsCost} pts) y ahorrar {currency.format(suggestedDiscount.saving)} en este pedido!</span>
+              <button type="button" onClick={() => { setSelectedRewardId(suggestedDiscount.reward.id); setError('') }}>Aplicar</button>
+            </div>}
             {selectedDiscountReward && <div className={styles.discountLine}><span>{selectedDiscountReward.name}</span><strong>−{currency.format(discountAmount)}</strong><button type="button" aria-label="Quitar descuento" onClick={() => setSelectedRewardId(null)}><X size={13} /></button></div>}
+            {discountNotApplicable && <p className={styles.discountWarning}>Este descuento no aplica a los productos de tu pedido. Agregá {selectedDiscountReward.discountScope === 'category' ? `un producto de ${selectedDiscountReward.discountCategory}` : selectedDiscountReward.productName} para usarlo.</p>}
             <div className={styles.total}><span>Total</span><strong>{currency.format(finalTotal)}</strong></div>
             <div className={styles.earned}><Award size={15} /> Sumás {pointsTotal} puntos{business.bonusPointsActiveToday ? ' (dobles hoy)' : ''}</div>
             <div className={styles.checkoutForm}>
+              <label><span>Nombre</span><input type="text" autoComplete="given-name" maxLength={60} value={customerFirstName} onChange={(event) => setCustomerFirstName(event.target.value)} /></label>
+              <label><span>Apellido (opcional)</span><input type="text" autoComplete="family-name" maxLength={60} value={customerLastName} onChange={(event) => setCustomerLastName(event.target.value)} /></label>
               <fieldset><legend>¿Cómo querés recibirlo?</legend>
                 {deliveryEnabled && <label className={styles.paymentOption}><input type="radio" name="fulfillment" value="delivery" checked={fulfillmentType === 'delivery'} onChange={() => setFulfillmentType('delivery')} /><span>Envío a domicilio</span></label>}
                 <label className={styles.paymentOption}><input type="radio" name="fulfillment" value="pickup" checked={fulfillmentType === 'pickup'} onChange={() => setFulfillmentType('pickup')} /><span>Retiro en el local</span></label>
               </fieldset>
               {fulfillmentType === 'delivery' && <>
-                <label><span>Dirección de entrega</span><input type="text" maxLength={200} placeholder="Calle, número, piso/depto" value={deliveryAddress} onChange={(event) => { setDeliveryAddress(event.target.value); setCoordinates(null) }} /></label>
-                <button className={styles.locationButton} type="button" onClick={useCurrentLocation} disabled={isLocating}>{isLocating ? 'Buscando ubicación...' : coordinates ? 'Ubicación exacta guardada ✓ (tocá para actualizar)' : 'Compartir mi ubicación exacta (recomendado)'}</button>
+                <label><span>Dirección de entrega</span><input type="text" maxLength={200} placeholder="Calle y número" value={deliveryAddress} onChange={(event) => { setDeliveryAddress(event.target.value); setCoordinates(null) }} /></label>
+                <div className={styles.floorApartmentRow}>
+                  <label><span>Piso (opcional)</span><input type="text" maxLength={20} value={deliveryFloor} onChange={(event) => setDeliveryFloor(event.target.value)} /></label>
+                  <label><span>Depto (opcional)</span><input type="text" maxLength={20} value={deliveryApartment} onChange={(event) => setDeliveryApartment(event.target.value)} /></label>
+                </div>
+                <button className={styles.locationButton} type="button" onClick={useCurrentLocation} disabled={isLocating}>{isLocating ? 'Buscando ubicación...' : coordinates ? 'Ubicación guardada ✓ (tocá para usar mi ubicación actual)' : 'Compartir mi ubicación exacta (recomendado)'}</button>
+                {coordinates && <>
+                  <Suspense fallback={<small className={styles.pickupInfo}>Cargando mapa...</small>}><LocationPicker position={coordinates} onChange={setCoordinates} /></Suspense>
+                  <small className={styles.pickupInfo}>Arrastrá el pin o tocá el mapa para ajustar el punto exacto de entrega.</small>
+                                  </>}
                 <label><span>Referencia (opcional)</span><input type="text" maxLength={200} placeholder="Entre calles, edificio, no anda el timbre..." value={deliveryReference} onChange={(event) => setDeliveryReference(event.target.value)} /></label>
               </>}
               {fulfillmentType === 'pickup' && business.address && <p className={styles.pickupInfo}>Retirás en: {business.address}</p>}
@@ -583,7 +635,7 @@ function LocalStorefront({ slug, session, onAuthenticate, onSignOut, isPreview =
           </>}
           {error && <p className={styles.inlineError} role="alert">{error}</p>}
           {notice && <div className={styles.success} role="status"><span>{notice}</span>{orderReceipt && <button className={styles.receiptPrintButton} type="button" onClick={() => window.print()}><Printer size={14} /> Imprimir ticket</button>}</div>}
-          <button className={styles.checkout} type="button" disabled={isPreview || (!cart.length && !selectedProductReward) || isSubmitting} onClick={placeOrder}>{isSubmitting ? <LoaderCircle size={17} className={styles.spinner} /> : null}{isPreview ? 'Vista previa' : isSubmitting ? 'Registrando...' : 'Confirmar pedido'}{!isSubmitting && !isPreview && <ArrowRight size={16} />}</button>
+          <button className={styles.checkout} type="button" disabled={isPreview || (!cart.length && !selectedProductReward) || isSubmitting || discountNotApplicable} onClick={placeOrder}>{isSubmitting ? <LoaderCircle size={17} className={styles.spinner} /> : null}{isPreview ? 'Vista previa' : isSubmitting ? 'Registrando...' : 'Confirmar pedido'}{!isSubmitting && !isPreview && <ArrowRight size={16} />}</button>
         </aside>
       </main>
       {orderReceipt && <section className={styles.printReceipt} aria-label={`Ticket del pedido ${orderReceipt.id}`}>

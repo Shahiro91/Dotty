@@ -14,7 +14,7 @@ const features = [
 
 const steps = [
   { title: 'Dejá tus datos', text: 'Completá el formulario con tu nombre, celular y el nombre de tu local.' },
-  { title: 'Te contactamos', text: 'Conversamos con vos, activamos tu local y te damos tu código de acceso.' },
+  { title: 'Activación inmediata', text: 'Tu local queda activo al registrarte, con 30 días de prueba gratis.' },
   { title: 'Cargá tu carta y compartí', text: 'Armá tus productos, personalizá tu tienda y mandá tu link a tus clientes.' },
 ]
 
@@ -175,7 +175,7 @@ function LandingPage({ onLogin, onRegister }) {
           <div className={styles.sectionHead}>
             <span className={styles.kicker}>Planes</span>
             <h2>Un precio simple por mes</h2>
-            <p>Abonás desde el alta de tu local. Sin costos de instalación.</p>
+            <p>Probá 30 días gratis. Después, abonás el plan que elijas, sin costos de instalación.</p>
           </div>
           <div className={styles.plans}>
             {plans.map((plan) => (
@@ -192,7 +192,7 @@ function LandingPage({ onLogin, onRegister }) {
 
         <section className={styles.cta}>
           <h2>¿Listo para llevar tu local a internet?</h2>
-          <p>Dejanos tus datos y te contactamos para activar tu tienda.</p>
+          <p>Registrate y activá tu tienda al instante, con 30 días gratis.</p>
           <button className={styles.ctaButton} type="button" onClick={onRegister}>Quiero registrar mi local <ArrowRight size={17} /></button>
         </section>
       </main>

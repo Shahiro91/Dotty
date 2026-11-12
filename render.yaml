@@ -20,7 +20,7 @@ services:
           property: connectionString
       - key: JWT_SECRET
         generateValue: true
-      - key: ADMIN_PASSWORD_2
+      - key: ADMIN_PASSWORD_1
         sync: false
       - key: MP_ENVIRONMENT
         value: sandbox

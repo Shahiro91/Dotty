@@ -24,6 +24,7 @@ function App() {
     apiRequest(`/auth/me${storefrontSlug ? `?businessSlug=${encodeURIComponent(storefrontSlug)}` : ''}`, { token: session.token })
       .then((user) => {
         setSession((current) => {
+          if (current?.token !== session.token) return current
           const updatedSession = { ...current, user }
           window.localStorage.setItem('sabor-vivo-session', JSON.stringify(updatedSession))
           return updatedSession
@@ -31,8 +32,11 @@ function App() {
       })
       .catch((error) => {
         if (error.status !== 401) return
-        window.localStorage.removeItem('sabor-vivo-session')
-        setSession(null)
+        setSession((current) => {
+          if (current?.token !== session.token) return current
+          window.localStorage.removeItem('sabor-vivo-session')
+          return null
+        })
       })
   }, [])
 
@@ -67,7 +71,6 @@ function App() {
       />
       {authRequest && (
         <AuthModal
-          user={session?.user}
           initialMode={authRequest.mode}
           partnerOnly={authRequest.audience === 'partner'}
           onAuthenticate={saveSession}

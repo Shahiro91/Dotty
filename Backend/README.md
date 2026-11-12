@@ -1,28 +1,40 @@
 # API de Dotty
 
-La API crea y migra las tablas de cuentas, locales, productos, recompensas, pedidos y canjes al iniciarse. Las contraseñas se almacenan con bcrypt; las sesiones usan JWT y los datos del partner se filtran por el local asociado a su cuenta.
+La API crea y migra las tablas de cuentas, locales, productos, recompensas, pedidos y canjes al iniciarse. Los clientes ingresan solo con su celular; las contraseñas de locales y administradores se almacenan con bcrypt. Las sesiones usan JWT y los datos del partner se filtran por el local asociado a su cuenta.
 
 ## Configuración
 
-1. Copiá `.env.example` como `.env` y ajustá `DATABASE_URL` a tu instancia de PostgreSQL y `JWT_SECRET` a una clave aleatoria de al menos 32 caracteres. Configurá también `ADMIN_PASSWORD_1` y `ADMIN_PASSWORD_2` con contraseñas distintas de 8 a 72 caracteres.
+1. Copiá `.env.example` como `.env` y ajustá `DATABASE_URL` a tu instancia de PostgreSQL y `JWT_SECRET` a una clave aleatoria de al menos 32 caracteres. Configurá `ADMIN_PASSWORD_1` con una contraseña de 8 a 72 caracteres.
 2. Desde esta carpeta, ejecutá `npm install` y después `npm run dev`.
 3. En otra terminal, iniciá el frontend con `npm run dev` desde `FrontEnd`.
 
 La base indicada en `DATABASE_URL` debe existir y el usuario debe poder crear tablas. Si tu PostgreSQL requiere SSL, configurá `PGSSL=true`. El frontend usa `http://localhost:3000` como API por defecto; se puede cambiar con `VITE_API_URL`.
 
-Las rutas de autenticación son `POST /api/auth/register`, `POST /api/auth/login` y `GET /api/auth/me`. Al aprobar una solicitud, se crea el local; el solicitante se registra luego con el mismo celular y obtiene acceso al panel partner. El panel permite editar identidad, logo, banner obligatorio y colores, además de previsualizar la página como cliente. El color primario se usa en títulos y botones; el secundario, en puntos, etiquetas y acentos. También permite administrar productos y sus puntos por unidad, configurar canjes, consultar clientes y mover pedidos entre estados.
+Los clientes usan `POST /api/auth/phone` con `phone` y opcionalmente `businessSlug`: crea la cuenta si no existe o recupera la existente. No solicita nombre ni contraseña. Los locales ingresan con `POST /api/auth/login` y su contraseña; `GET /api/auth/me` consulta la sesión. Las sesiones iniciadas solo con celular no dan acceso al panel aunque la cuenta cambie de rol. El panel permite administrar la identidad del local, productos, canjes, clientes y pedidos.
 
-Los puntos se guardan por cliente y por local en `customer_business_points`: el celular identifica una cuenta global, pero cada local tiene su propio saldo. Al iniciar, los saldos faltantes se reconstruyen desde pedidos y canjes existentes (ignorando lo cancelado). `POST /api/auth/login` y `GET /api/auth/me?businessSlug=<slug>` devuelven en `points` el saldo de ese local; sin `businessSlug` devuelven 0.
+**Seguridad:** el celular no se verifica. Cualquier persona que conozca un número de cliente puede ingresar a esa cuenta, consultar y usar sus puntos o realizar pedidos en su nombre. Para evitarlo es necesario incorporar una verificación del número.
+
+Los puntos se guardan por cliente y por local en `customer_business_points`: el celular identifica una cuenta global, pero cada local tiene su propio saldo. Al iniciar, los saldos faltantes se reconstruyen desde pedidos y canjes existentes (ignorando lo cancelado). `POST /api/auth/phone` y `GET /api/auth/me?businessSlug=<slug>` devuelven en `points` el saldo de ese local; sin `businessSlug` devuelven 0.
+
+En cada pedido de un local se solicita el nombre, el apellido opcional y los datos de entrega necesarios. Se guardan con el pedido, no en la cuenta nueva del cliente. La pestaña Clientes muestra el nombre del primer pedido y la primera dirección de entrega de cada cliente en ese local; los pedidos anteriores conservan sus datos existentes. El navegador recuerda el nombre y la dirección para pedidos posteriores.
 
 Las categorías se guardan por local y pueden existir antes de cargar productos; al iniciar, las categorías de productos existentes se migran automáticamente. Cada local tiene una página pública en `/local/<slug>`. Sus pedidos quedan en `customer_orders` con el `business_id` correspondiente. Los puntos se calculan con `points_per_unit` de cada producto. Cancelar un pedido revierte esos puntos una sola vez; cancelar un canje devuelve el costo descontado. El menú del sitio raíz conserva el cálculo heredado de 1 punto por cada $1.000.
 
 Los logos y fotos se optimizan en el navegador y se guardan como imágenes WebP en PostgreSQL. Es práctico para comenzar; si el volumen de imágenes crece, conviene migrarlas a almacenamiento de objetos persistente.
 
-Las solicitudes para registrar un local se guardan como `pending` en `local_applications` mediante `POST /api/local-applications`. No crean una cuenta ni otorgan acceso; el equipo debe contactar al solicitante y aprobarlo antes de darlo de alta. El formulario solicita plan `basic` o `vip`.
+`POST /api/local-applications` crea la cuenta con contraseña y el local en una transacción, lo activa inmediatamente y devuelve la sesión del dueño. Se guarda el registro como `approved` en `local_applications` y comienza una prueba gratuita de 30 días. El formulario solicita plan `basic` o `vip`; no se requiere aprobación ni código. El celular y el email no pueden estar asociados a otra cuenta.
 
-El administrador usa el celular `1133113604`. El backend crea o actualiza esa cuenta al iniciar, usando la contraseña privada de `ADMIN_PASSWORD_2`; ese valor es la fuente de verdad y nunca se solicita en el formulario público. Iniciá sesión en la web con el número exacto y la contraseña correspondiente: aparecerá el botón de administración. Los endpoints de administración verifican el rol contra PostgreSQL.
+El administrador usa solo el email `mariaquintana520@gmail.com` y la contraseña privada de `ADMIN_PASSWORD_1`; no tiene celular asociado. El backend crea o actualiza esa cuenta al iniciar y quita cualquier celular previo de las cuentas con rol de administrador. Iniciá sesión en la web con ese email y la contraseña correspondiente: aparecerá el botón de administración. Los endpoints de administración verifican el rol contra PostgreSQL.
 
-Desde el panel admin se puede marcar una solicitud como contactada, aprobarla o rechazarla. Al aprobar, una cuenta ya registrada con ese celular pasa a ser dueña del local; si todavía no tiene cuenta, podrá registrarse con ese mismo celular y se le asignará ese rol. El panel admin y el partner aparecen automáticamente después de iniciar sesión con el rol correspondiente.
+Las solicitudes anteriores pendientes, contactadas o aprobadas sin activar se activan al ingresar con las credenciales de la cuenta asociada; su prueba comienza entonces. Las solicitudes rechazadas no se activan. Los locales ya activos conservan su vencimiento al ingresar.
+
+Para ejecutar las pruebas, configurá `TEST_DATABASE_URL` con una base PostgreSQL de pruebas y ejecutá `node --test test/phone-order.test.js test/billing-rules.test.js test/order-schema.test.js test/order-items.test.js` desde `Backend`. La prueba de integración crea y elimina un esquema aislado. Mercado Pago se simula exclusivamente en el proceso de prueba: no se realizan pagos ni llamadas reales al servicio.
+
+La integración comprueba que los 56 métodos y rutas de API incluidos en `test/fixtures/api-coverage.js` reciben al menos una respuesta exitosa; además verifica respuestas y errores en distintos flujos. El inventario debe actualizarse cuando cambien los endpoints. Esta comprobación no cubre todos los escenarios ni reemplaza una prueba con el sandbox real de Mercado Pago. Sin `TEST_DATABASE_URL`, la integración se omite.
+
+## Organización del backend
+
+La configuración y la conexión/inicialización de PostgreSQL están en `src/config` y `src/database`. `src/middleware` contiene autenticación, autorización y limitación de solicitudes. `src/modules` agrupa autenticación, administración, locales, categorías, productos, agregados, importación de catálogo, clientes, estadísticas, facturación, videos, recompensas, canjes y pedidos. Los servicios y repositorios de pedidos mantienen sus operaciones transaccionales en una misma conexión; el repositorio de puntos y el validador de recompensas se comparten entre los flujos que los necesitan. `server.js` configura y monta los módulos e inicia la aplicación.
 
 ```sql
 SELECT id, first_name, last_name, phone, business_name, requested_plan, created_at
@@ -39,14 +51,14 @@ Un solo servicio web sirve la API y el frontend (`FrontEnd/dist`), con PostgreSQ
 
 1. Subí el proyecto completo a GitHub (el backend importa `FrontEnd/src/data/menu.js`).
 2. En Render: **New > Blueprint** y elegí el repositorio.
-3. Completá `ADMIN_PASSWORD_2` y `MP_ACCESS_TOKEN` (token de producción de Mercado Pago) cuando lo pida.
+3. Completá `ADMIN_PASSWORD_1` y `MP_ACCESS_TOKEN` (token de producción de Mercado Pago) cuando lo pida.
 4. `JWT_SECRET` y `DATABASE_URL` se generan solos; la URL pública (`RENDER_EXTERNAL_URL`) se usa para los links de pago y el webhook.
 
 Si usás un dominio propio, definí `FRONTEND_ORIGIN=https://tudominio.com`. Para volver a probar en sandbox, poné `MP_ENVIRONMENT=sandbox` con un token de prueba.
 
 ## Suscripción de los locales
 
-Plan Básico $15.000/mes y VIP $25.000/mes. Los locales nuevos tienen 30 días de prueba gratis desde que activan su cuenta. El cambio de plan se aplica de inmediato y el siguiente pago usa el precio del plan elegido. Si pasan 5 días del vencimiento sin pago, la cuenta se suspende (panel, tienda, pedidos y canjes quedan bloqueados) sin borrar datos. Al pagar se reactiva.
+Plan Básico $15.000/mes y VIP $25.000/mes. Los locales nuevos tienen 30 días de prueba gratis desde su registro. El cambio de plan se aplica de inmediato y el siguiente pago usa el precio del plan elegido. Al vencer la prueba sin pago se suspende la cuenta; tras una suscripción pagada hay 5 días de gracia. La suspensión bloquea panel, tienda, pedidos y canjes sin borrar datos. Al pagar se reactiva.
 
 El cobro de suscripciones usa Checkout Pro de Mercado Pago. En desarrollo local, el backend arranca en modo sandbox y no acepta tokens de producción:
 

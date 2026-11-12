@@ -1,38 +1,42 @@
 import { useEffect, useState } from 'react'
-import { Ban, Check, ClipboardList, LoaderCircle, LogOut, Phone, RefreshCw, Trash2 } from 'lucide-react'
+import { Ban, Check, ClipboardList, LoaderCircle, LogOut, Phone, Trash2 } from 'lucide-react'
 import { apiRequest } from '../lib/api.js'
 import styles from './AdminDashboard.module.css'
 
-const filters = [
-  { value: 'pending', label: 'Pendientes' },
-  { value: 'contacted', label: 'Contactados' },
-  { value: 'all', label: 'Todas' },
-]
-
-const statusLabels = {
-  pending: 'Pendiente',
-  contacted: 'Contactado',
-  approved: 'Aprobado',
-  rejected: 'Rechazado',
-}
 const planLabels = { basic: 'Básico', vip: 'VIP' }
 
 function AdminDashboard({ token, onSignOut }) {
-  const [section, setSection] = useState('requests')
-  const [filter, setFilter] = useState('pending')
   const [applications, setApplications] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [busyId, setBusyId] = useState(null)
-  const [refreshVersion, setRefreshVersion] = useState(0)
   const [error, setError] = useState('')
-  const [issuedCode, setIssuedCode] = useState(null)
+  const [tab, setTab] = useState('businesses')
+  const [messages, setMessages] = useState([])
+
+  useEffect(() => {
+    apiRequest('/admin/support', { token }).then((result) => setMessages(result.messages)).catch(() => {})
+  }, [token])
+
+  async function toggleResolved(item) {
+    try {
+      const result = await apiRequest(`/admin/support/${item.id}`, { method: 'PATCH', token, body: { resolved: !item.resolved } })
+      setMessages((current) => current.map((message) => message.id === item.id ? result.message : message))
+    } catch (requestError) { setError(requestError.message) }
+  }
+
+  async function deleteMessage(item) {
+    if (!window.confirm('¿Eliminar este mensaje?')) return
+    try {
+      await apiRequest(`/admin/support/${item.id}`, { method: 'DELETE', token })
+      setMessages((current) => current.filter((message) => message.id !== item.id))
+    } catch (requestError) { setError(requestError.message) }
+  }
 
   useEffect(() => {
     let isCurrent = true
-    const status = section === 'active' ? 'approved' : filter === 'all' ? 'requests' : filter
     setIsLoading(true)
     setError('')
-    apiRequest(`/admin/local-applications?status=${status}`, { token })
+    apiRequest('/admin/local-applications?status=approved', { token })
       .then((result) => {
         if (isCurrent) setApplications(result.applications)
       })
@@ -43,20 +47,7 @@ function AdminDashboard({ token, onSignOut }) {
         if (isCurrent) setIsLoading(false)
       })
     return () => { isCurrent = false }
-  }, [filter, refreshVersion, section, token])
-
-  async function generateCode(application) {
-    setBusyId(application.id)
-    setError('')
-    try {
-      const result = await apiRequest(`/admin/local-applications/${application.id}/activation-code`, { method: 'POST', token })
-      setIssuedCode({ code: result.activationCode, businessName: application.businessName, phone: application.phone, email: application.email })
-    } catch (requestError) {
-      setError(requestError.message)
-    } finally {
-      setBusyId(null)
-    }
-  }
+  }, [token])
 
   async function updateSubscription(application, action) {
     if (action === 'suspend' && !window.confirm(`¿Suspender ahora a ${application.businessName}? No podrán usar la cuenta hasta que paguen o la extiendas.`)) return
@@ -86,30 +77,6 @@ function AdminDashboard({ token, onSignOut }) {
     }
   }
 
-  async function updateStatus(applicationId, status) {
-    setBusyId(applicationId)
-    setError('')
-    try {
-      const result = await apiRequest(`/admin/local-applications/${applicationId}`, {
-        method: 'PATCH',
-        token,
-        body: { status },
-      })
-      if (status === 'approved' && result.activationCode) {
-        const approved = applications.find((application) => application.id === applicationId)
-        setIssuedCode({ code: result.activationCode, businessName: approved?.businessName || '', phone: approved?.phone || '', email: approved?.email || '' })
-      }
-      setApplications((current) => status === 'approved'
-        ? current.filter((application) => application.id !== applicationId)
-        : current.map((application) => application.id === applicationId ? result.application : application),
-      )
-    } catch (requestError) {
-      setError(requestError.message)
-    } finally {
-      setBusyId(null)
-    }
-  }
-
   return (
     <main className={styles.backdrop} aria-labelledby="admin-title">
       <section className={styles.dialog}>
@@ -124,42 +91,35 @@ function AdminDashboard({ token, onSignOut }) {
           <button className={styles.closeButton} type="button" onClick={onSignOut}><LogOut size={17} /> Cerrar sesión</button>
         </header>
 
-        <nav className={styles.sectionTabs} aria-label="Secciones administrativas">
-          <button className={`${styles.sectionTab} ${section === 'requests' ? styles.sectionTabActive : ''}`} type="button" aria-current={section === 'requests' ? 'page' : undefined} onClick={() => setSection('requests')}>Solicitudes</button>
-          <button className={`${styles.sectionTab} ${section === 'active' ? styles.sectionTabActive : ''}`} type="button" aria-current={section === 'active' ? 'page' : undefined} onClick={() => setSection('active')}>Activos</button>
-        </nav>
-
-        {section === 'requests' && <nav className={styles.filters} aria-label="Filtrar solicitudes">
-          {filters.map((item) => (
-            <button
-              key={item.value}
-              className={`${styles.filterButton} ${filter === item.value ? styles.filterActive : ''}`}
-              type="button"
-              aria-pressed={filter === item.value}
-              onClick={() => setFilter(item.value)}
-            >
-              {item.label}
-            </button>
-          ))}
-          <button className={styles.refreshButton} type="button" aria-label="Actualizar solicitudes" title="Actualizar" onClick={() => setRefreshVersion((version) => version + 1)}>
-            <RefreshCw size={17} />
-          </button>
-        </nav>}
-
         {error && <p className={styles.error} role="alert">{error}</p>}
-        {issuedCode && (
-          <div className={styles.error} role="status" style={{ background: '#edf5ea', color: '#2f5a2c', borderColor: '#bcd8b8' }}>
-            <p><strong>Código de activación para {issuedCode.businessName}:</strong></p>
-            <p style={{ fontSize: 22, letterSpacing: '0.12em', fontWeight: 800 }}>{issuedCode.code}</p>
-            <p>El dueño ingresará con {issuedCode.email || 'el email registrado'} y su contraseña. Mandale este código por WhatsApp al {issuedCode.phone}. Se muestra una sola vez y vence en 7 días.</p>
-            <button type="button" className={styles.approveButton} onClick={() => navigator.clipboard?.writeText(issuedCode.code)}>Copiar</button>{' '}
-            <button type="button" className={styles.contactButton} onClick={() => setIssuedCode(null)}>Cerrar</button>
+        <div className={styles.tabs}>
+          <button type="button" className={tab === 'businesses' ? styles.tabActive : ''} onClick={() => setTab('businesses')}>Locales</button>
+          <button type="button" className={tab === 'support' ? styles.tabActive : ''} onClick={() => setTab('support')}>Dudas y sugerencias{messages.some((item) => !item.resolved) && <span className={styles.tabCount}>{messages.filter((item) => !item.resolved).length}</span>}</button>
+        </div>
+        {tab === 'support' ? (
+          messages.length === 0 ? <p className={styles.empty}>Todavía no hay mensajes.</p> : <div className={styles.list}>
+            {messages.map((item) => (
+              <article className={styles.application} key={item.id} style={item.resolved ? { opacity: 0.55 } : undefined}>
+                <div className={styles.business}>
+                  <div className={styles.businessHeading}>
+                    <h3>{item.businessName}</h3>
+                    <span className={styles.status}>{{ question: 'Duda', suggestion: 'Sugerencia', contact: 'Contacto' }[item.kind]}</span>
+                  </div>
+                  <p>{item.senderName} {item.senderContact && `· ${item.senderContact}`}</p>
+                  <p style={{ whiteSpace: 'pre-wrap' }}>{item.message}</p>
+                  <time dateTime={item.createdAt}>{new Intl.DateTimeFormat('es-AR', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(item.createdAt))}</time>
+                </div>
+                <div className={styles.actions}>
+                  <button type="button" className={styles.approveButton} onClick={() => toggleResolved(item)}><Check size={15} /> {item.resolved ? 'Reabrir' : 'Resuelto'}</button>
+                  <button type="button" className={styles.rejectButton} aria-label="Eliminar mensaje" onClick={() => deleteMessage(item)}><Trash2 size={16} /></button>
+                </div>
+              </article>
+            ))}
           </div>
-        )}
-        {isLoading ? (
-          <div className={styles.loading}><LoaderCircle className={styles.spinner} size={20} /> Cargando {section === 'active' ? 'locales activos' : 'solicitudes'}...</div>
+        ) : isLoading ? (
+          <div className={styles.loading}><LoaderCircle className={styles.spinner} size={20} /> Cargando locales activos...</div>
         ) : applications.length === 0 ? (
-          <p className={styles.empty}>{section === 'active' ? 'Todavía no hay locales activos.' : 'No hay solicitudes en esta vista.'}</p>
+          <p className={styles.empty}>Todavía no hay locales activos.</p>
         ) : (
           <div className={styles.list}>
             {applications.map((application) => (
@@ -167,7 +127,7 @@ function AdminDashboard({ token, onSignOut }) {
                 <div className={styles.business}>
                   <div className={styles.businessHeading}>
                     <h3>{application.businessName}</h3>
-                    <span className={`${styles.status} ${styles[`status_${application.status}`]}`}>{section === 'active' ? 'Activo' : statusLabels[application.status]}</span>
+                    <span className={`${styles.status} ${styles[`status_${application.status}`]}`}>{application.claimed ? 'Activo' : 'Pendiente de ingreso'}</span>
                     <span className={`${styles.plan} ${application.requestedPlan === 'vip' ? styles.planVip : styles.planBasic}`}>{planLabels[application.requestedPlan] || 'Básico'}</span>
                   </div>
                   <p>{application.firstName} {application.lastName}</p>
@@ -175,13 +135,12 @@ function AdminDashboard({ token, onSignOut }) {
                   <a className={styles.phone} href={`tel:${application.phone}`}><Phone size={14} /> {application.phone}</a>
                   <time dateTime={application.createdAt}>{new Intl.DateTimeFormat('es-AR', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(application.createdAt))}</time>
                 </div>
-                {section === 'active' && !application.claimed && (
+                {!application.claimed && (
                   <div className={styles.actions}>
-                    <span className={`${styles.status} ${styles.status_contacted}`}>Sin cuenta de dueño</span>
-                    <button type="button" className={styles.contactButton} disabled={busyId === application.id} onClick={() => generateCode(application)}>Generar código nuevo</button>
+                    <span className={`${styles.status} ${styles.status_contacted}`}>Debe ingresar con su contraseña</span>
                   </div>
                 )}
-                {section === 'active' && application.billing && (
+                {application.billing && (
                   <div className={styles.actions}>
                     <span className={`${styles.status} ${application.billing.status === 'active' ? styles.status_approved : application.billing.status === 'grace' ? styles.status_contacted : styles.status_rejected}`}>
                       {application.billing.status === 'active' ? 'Al día' : application.billing.status === 'grace' ? 'Con plazo para pagar' : 'Suspendido'} · vence {new Intl.DateTimeFormat('es-AR', { dateStyle: 'medium' }).format(new Date(application.billing.dueAt))}
@@ -191,19 +150,11 @@ function AdminDashboard({ token, onSignOut }) {
                     <button type="button" className={styles.rejectButton} aria-label={`Eliminar ${application.businessName}`} title="Eliminar local definitivamente" disabled={busyId === application.id} onClick={() => deleteBusiness(application)}><Trash2 size={16} /></button>
                   </div>
                 )}
-                {['pending', 'contacted'].includes(application.status) && (
-                  <div className={styles.actions}>
-                    {application.status === 'pending' && <button type="button" className={styles.contactButton} disabled={busyId === application.id} onClick={() => updateStatus(application.id, 'contacted')}><Phone size={15} /> Marcar contactado</button>}
-                    <button type="button" className={styles.approveButton} disabled={busyId === application.id} onClick={() => updateStatus(application.id, 'approved')}><Check size={15} /> Aprobar</button>
-                    <button type="button" className={styles.rejectButton} aria-label={`Rechazar solicitud de ${application.businessName}`} title="Rechazar" disabled={busyId === application.id} onClick={() => updateStatus(application.id, 'rejected')}><Ban size={16} /></button>
-                    {busyId === application.id && <LoaderCircle className={styles.spinner} size={17} />}
-                  </div>
-                )}
               </article>
             ))}
           </div>
         )}
-        <p className={styles.note}>{section === 'active' ? 'El plan mostrado es el que el local solicitó al registrarse.' : 'Al aprobar, enviá el código de activación. El local ingresará con el celular y la contraseña que eligió al registrarse.'}</p>
+        <p className={styles.note}>Los locales nuevos se activan al registrarse y tienen 30 días gratis.</p>
       </section>
     </main>
   )
