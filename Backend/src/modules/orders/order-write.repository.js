@@ -5,7 +5,7 @@ export async function lockOrderCustomer(client, customerId) {
 
 export async function lockDiscountReward(client, rewardId, businessId) {
   const { rows } = await client.query(
-    `SELECT r.id, r.name, r.points_cost, r.discount_type, r.discount_value, r.discount_scope, r.product_id,
+    `SELECT r.id, r.name, r.points_cost, r.discount_type, r.discount_value, r.discount_scope, r.product_id, r.available_days,
             c.name AS category_name
      FROM business_rewards r LEFT JOIN business_categories c ON c.id = r.discount_category_id
      WHERE r.id = $1 AND r.business_id = $2 AND r.reward_type = 'discount' AND r.is_available = TRUE FOR UPDATE OF r`,
@@ -16,7 +16,7 @@ export async function lockDiscountReward(client, rewardId, businessId) {
 
 export async function lockProductReward(client, rewardId, businessId) {
   const { rows } = await client.query(
-    `SELECT r.id, r.name, r.points_cost, p.id AS product_id, p.name AS product_name,
+    `SELECT r.id, r.name, r.points_cost, r.available_days, p.id AS product_id, p.name AS product_name,
             p.category, p.image_data_url AS "imageDataUrl"
      FROM business_rewards r
      JOIN business_products p ON p.id = r.product_id AND p.business_id = r.business_id AND p.is_available = TRUE

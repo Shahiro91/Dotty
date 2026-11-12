@@ -1,5 +1,6 @@
 import { pool } from '../../database/pool.js'
 import { isBusinessSuspended } from '../../middleware/authorize.js'
+import { isAvailableToday } from '../businesses/business.rules.js'
 import { adjustPoints, lockPoints } from './points.repository.js'
 import { findBusinessId, insertRedemption, lockAvailableReward, lockCustomerRole, lockRedemption, setRedemptionStatus } from './redemptions.repository.js'
 
@@ -19,6 +20,7 @@ export async function redeemReward(customerId, slug, rewardId) {
     const reward = !error ? await lockAvailableReward(client, businessId, rewardId) : null
     if (!error && !reward) error = 'reward_not_found'
     if (!error && (reward.reward_type === 'discount' || reward.product_id)) error = 'requires_order'
+    if (!error && !isAvailableToday(reward.available_days)) error = 'unavailable_today'
     if (!error && currentPoints < reward.points_cost) error = 'insufficient_points'
     if (error) {
       await client.query('ROLLBACK')

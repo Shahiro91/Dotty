@@ -59,7 +59,7 @@
 .sectionHead > span { color: #757a73; font-size: 11px; }
 .eyebrow { color: var(--store-secondary); font-size: 9px; font-weight: 800; text-transform: uppercase; }
 .productGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-.categoryTabs { margin: 0 0 14px; padding-bottom: 4px; display: flex; gap: 8px; overflow-x: auto; scrollbar-width: thin; }
+.categoryTabs { margin: 0 0 14px; padding-bottom: 10px; display: flex; gap: 8px; overflow-x: auto; scrollbar-width: thin; }
 .categoryTabs button { flex: 0 0 auto; min-height: 34px; padding: 0 14px; display: inline-flex; align-items: center; gap: 5px; border: 1px solid #ddddd3; border-radius: 99px; background: white; color: #565b54; cursor: pointer; font: inherit; font-size: 12px; font-weight: 750; }
 .categoryTabs button.categoryTabActive { border-color: var(--store-primary); background: var(--store-primary); color: white; }
 .fractionalBuilder { margin: 0 0 16px; padding: 14px; display: grid; grid-template-columns: 1fr auto; gap: 8px 14px; border: 1px solid color-mix(in srgb, var(--store-secondary), white 72%); border-radius: 6px; background: color-mix(in srgb, var(--store-secondary), white 96%); }
@@ -232,3 +232,8 @@
   .receiptGrandTotal { margin-top: 10px; padding-top: 8px; border-top: 1px dashed #333; font-size: 13px; font-weight: 800; }
 }
 @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: .01ms; } }
+.oldPoints { color: #8b8f91; font-weight: 400; text-decoration: line-through; }
+.doublePoints { color: #1a7f4b; font-weight: 800; }
+.rewardDays { display: block; margin: 0 0 8px; color: #6b6f6d; font-size: 12px; }
+.bestSellersRow { display: flex; gap: 12px; padding-bottom: 10px; overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: thin; }
+.bestSellersRow > * { flex: 0 0 min(280px, 82%); scroll-snap-align: start; }

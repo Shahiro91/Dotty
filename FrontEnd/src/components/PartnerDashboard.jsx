@@ -43,7 +43,7 @@ const orderStatuses = [
 ]
 
 const emptyProduct = { name: '', description: '', category: '', price: '', pointsPerUnit: '0', imageDataUrl: '', imageScale: 1, imagePositionX: 50, imagePositionY: 50 }
-const emptyReward = { name: '', description: '', imageDataUrl: '', rewardType: 'product', discountType: 'fixed', discountScope: 'total', discountCategory: '', discountValue: '', pointsCost: '' }
+const emptyReward = { name: '', description: '', imageDataUrl: '', rewardType: 'product', discountType: 'fixed', discountScope: 'total', discountCategory: '', discountValue: '', pointsCost: '', availableDays: null }
 const openingDayLabels = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
 const openingDayNames = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
 
@@ -582,6 +582,11 @@ function PartnerDashboard({ token, user, onSignOut }) {
     setIsSaving(true)
     setError('')
     const isDiscount = rewardDraft.rewardType === 'discount'
+    if (Array.isArray(rewardDraft.availableDays) && rewardDraft.availableDays.length === 0) {
+      setError('Elegí al menos un día para el canje o desmarcá "Solo en días específicos".')
+      setIsSaving(false)
+      return
+    }
     const body = {
       ...rewardDraft,
       productId: (rewardDraft.rewardType === 'product' || (isDiscount && rewardDraft.discountScope === 'product')) && rewardDraft.productId ? Number(rewardDraft.productId) : null,
@@ -589,6 +594,7 @@ function PartnerDashboard({ token, user, onSignOut }) {
       discountCategory: isDiscount && rewardDraft.discountScope === 'category' ? rewardDraft.discountCategory : '',
       discountValue: rewardDraft.rewardType === 'discount' ? Number(rewardDraft.discountValue) : 0,
       pointsCost: Number(rewardDraft.pointsCost),
+      availableDays: Array.isArray(rewardDraft.availableDays) && rewardDraft.availableDays.length ? rewardDraft.availableDays : null,
     }
     try {
       const result = editingRewardId
@@ -1009,9 +1015,20 @@ function PartnerDashboard({ token, user, onSignOut }) {
             <label className={styles.fieldLabel} htmlFor="reward-image">Foto opcional</label><input className={styles.fileInput} id="reward-image" type="file" accept="image/*" onChange={(event) => selectImage(event, (image) => setRewardDraft((current) => ({ ...current, imageDataUrl: image })))} />
             {rewardDraft.imageDataUrl && <div className={styles.rewardPhotoPreview}><img src={rewardDraft.imageDataUrl} alt="Vista previa del canje" /><button type="button" aria-label="Quitar foto del canje" onClick={() => setRewardDraft((current) => ({ ...current, imageDataUrl: '' }))}><X size={15} /></button></div>}
             <label className={styles.fieldLabel} htmlFor="reward-cost">Puntos necesarios</label><input className={styles.textInput} id="reward-cost" type="number" min="1" step="1" value={rewardDraft.pointsCost} onChange={(event) => setRewardDraft({ ...rewardDraft, pointsCost: event.target.value })} required />
+            <label className={styles.weekdayOption} htmlFor="reward-specific-days"><input id="reward-specific-days" type="checkbox" checked={Array.isArray(rewardDraft.availableDays)} onChange={(event) => setRewardDraft({ ...rewardDraft, availableDays: event.target.checked ? [] : null })} /><span>Solo en días específicos</span></label>
+            {Array.isArray(rewardDraft.availableDays) && <>
+              <div className={styles.weekdayGrid}>{weekDays.map((day) => {
+                const selected = rewardDraft.availableDays.includes(day.value)
+                return <label className={`${styles.weekdayOption} ${selected ? styles.weekdaySelected : ''}`} key={day.value}>
+                  <input type="checkbox" checked={selected} onChange={() => setRewardDraft((current) => ({ ...current, availableDays: selected ? current.availableDays.filter((value) => value !== day.value) : [...current.availableDays, day.value] }))} />
+                  <span>{day.label}</span>
+                </label>
+              })}</div>
+              <small className={styles.imageZoomHelp}>Los clientes solo podrán usar este canje los días elegidos (horario de Argentina).</small>
+            </>}
             <div className={styles.formActions}><button className={styles.primaryButton} type="submit" disabled={isSaving}>{isSaving ? 'Guardando...' : editingRewardId ? 'Guardar canje' : 'Agregar canje'}</button>{editingRewardId && <button className={styles.textButton} type="button" onClick={() => { setEditingRewardId(null); setRewardDraft(emptyReward) }}>Cancelar edición</button>}</div>
           </form>
-          <div className={styles.listSection}><div className={styles.sectionHeading}><h2>Canjes disponibles</h2><p>{rewards.length} opciones</p></div>{rewards.length === 0 ? <p className={styles.empty}>Todavía no configuraste canjes.</p> : rewards.map((reward) => { const linkedProduct = products.find((product) => String(product.id) === String(reward.productId)); return <article className={styles.rewardRow} key={reward.id}>{reward.imageDataUrl && <span className={styles.rewardThumb}><img src={reward.imageDataUrl} alt="" /></span>}<div className={styles.rewardPoints}>{reward.pointsCost}<small>pts</small></div><div className={styles.rowMain}><strong>{reward.name}</strong><span>{reward.rewardType === 'discount' ? `Descuento ${reward.discountType === 'percentage' ? `${reward.discountValue}%` : currency.format(reward.discountValue)} · ${reward.discountScope === 'product' ? `en ${linkedProduct?.name || 'un producto'}` : reward.discountScope === 'category' ? `en ${reward.discountCategory}` : 'en el total'} · ${reward.description || 'aplicable a una compra'}` : linkedProduct ? `Producto: ${linkedProduct.name} · ${reward.description || 'Canje por puntos'}` : reward.description || 'Producto'}</span></div><button className={styles.rowButton} type="button" onClick={() => startEditingReward(reward)}>Editar</button><button className={styles.deleteButton} type="button" aria-label={`Quitar ${reward.name}`} onClick={() => removeReward(reward.id)}><Trash2 size={16} /></button></article>})}</div>
+          <div className={styles.listSection}><div className={styles.sectionHeading}><h2>Canjes disponibles</h2><p>{rewards.length} opciones</p></div>{rewards.length === 0 ? <p className={styles.empty}>Todavía no configuraste canjes.</p> : rewards.map((reward) => { const linkedProduct = products.find((product) => String(product.id) === String(reward.productId)); return <article className={styles.rewardRow} key={reward.id}>{reward.imageDataUrl && <span className={styles.rewardThumb}><img src={reward.imageDataUrl} alt="" /></span>}<div className={styles.rewardPoints}>{reward.pointsCost}<small>pts</small></div><div className={styles.rowMain}><strong>{reward.name}</strong><span>{reward.rewardType === 'discount' ? `Descuento ${reward.discountType === 'percentage' ? `${reward.discountValue}%` : currency.format(reward.discountValue)} · ${reward.discountScope === 'product' ? `en ${linkedProduct?.name || 'un producto'}` : reward.discountScope === 'category' ? `en ${reward.discountCategory}` : 'en el total'} · ${reward.description || 'aplicable a una compra'}` : linkedProduct ? `Producto: ${linkedProduct.name} · ${reward.description || 'Canje por puntos'}` : reward.description || 'Producto'}{reward.availableDays?.length ? ` · Solo ${weekDays.filter((day) => reward.availableDays.includes(day.value)).map((day) => day.label.slice(0, 3)).join(', ')}` : ''}</span></div><button className={styles.rowButton} type="button" onClick={() => startEditingReward(reward)}>Editar</button><button className={styles.deleteButton} type="button" aria-label={`Quitar ${reward.name}`} onClick={() => removeReward(reward.id)}><Trash2 size={16} /></button></article>})}</div>
         </div>}
 
         {section === 'customers' && <section className={styles.formSection}><div className={styles.sectionHeading}><h2>Clientes del local</h2><p>Personas que hicieron al menos un pedido en tu local. Se muestran los datos del primer pedido y la primera dirección de entrega.</p></div>{customers.length === 0 ? <p className={styles.empty}>Todavía no hay clientes registrados.</p> : <div className={styles.tableWrap}><table className={styles.customerTable}><thead><tr><th>Nombre</th><th>Apellido</th><th>Celular</th><th>Dirección</th></tr></thead><tbody>{customers.map((customer) => <tr key={customer.phone}><td>{customer.firstName}</td><td>{customer.lastName}</td><td><a href={`tel:${customer.phone}`}>{customer.phone}</a></td><td>{customer.deliveryAddress || '—'}</td></tr>)}</tbody></table></div>}</section>}
@@ -1421,7 +1438,7 @@ function OrdersBoard({ orders, businessName, busyOrderId, onChangeStatus }) {
       const columnHasPrintingOrder = columnOrders.some((order) => order.id === printingOrderId)
       return <section className={`${styles.orderColumn} ${columnHasPrintingOrder ? styles.printingOrderColumn : ''}`} key={status.id}>
         <header className={styles.columnHeader}><h2>{status.label}</h2><span>{columnOrders.length}</span></header>
-        {columnOrders.length === 0 ? <p className={styles.columnEmpty}>Sin pedidos</p> : columnOrders.map((order) => {
+        {columnOrders.length === 0 ? <p className={styles.columnEmpty}>Sin pedidos</p> : <div className={styles.columnScroll}>{columnOrders.map((order) => {
           const collapsible = order.status !== 'in_process'
           const showDetails = !collapsible || expandedOrderId === order.id
           return (
@@ -1457,7 +1474,7 @@ function OrdersBoard({ orders, businessName, busyOrderId, onChangeStatus }) {
             </div>
           </article>
           )
-        })}
+        })}</div>}
       </section>
     })}
   </div>

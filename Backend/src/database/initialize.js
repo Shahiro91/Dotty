@@ -149,6 +149,7 @@ export async function initializeDatabase() {
     ALTER TABLE business_rewards ADD COLUMN IF NOT EXISTS discount_value INTEGER NOT NULL DEFAULT 0;
     ALTER TABLE business_rewards ADD COLUMN IF NOT EXISTS discount_scope VARCHAR(10) NOT NULL DEFAULT 'total' CHECK (discount_scope IN ('total', 'product', 'category'));
     ALTER TABLE business_rewards ADD COLUMN IF NOT EXISTS discount_category_id BIGINT REFERENCES business_categories(id) ON DELETE SET NULL;
+    ALTER TABLE business_rewards ADD COLUMN IF NOT EXISTS available_days SMALLINT[];
     CREATE TABLE IF NOT EXISTS business_redemptions (
       id BIGSERIAL PRIMARY KEY,
       business_id BIGINT NOT NULL REFERENCES businesses(id),

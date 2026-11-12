@@ -77,6 +77,7 @@
 .statsRankTrack { height: 5px; overflow: hidden; border-radius: 5px; background: #f0efe8; }
 .statsRankTrack span { height: 100%; display: block; border-radius: inherit; background: var(--store-secondary, #58705e); }
 .orderColumn { min-width: 0; }
+.columnScroll { max-height: calc(100vh - 230px); overflow-y: auto; padding-right: 4px; overscroll-behavior: contain; scrollbar-width: thin; }
 .columnHeader { min-height: 42px; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; }
 .columnHeader h2 { margin: 0; font-size: 13px; font-weight: 800; }
 .columnHeader span { min-width: 22px; height: 22px; display: grid; place-items: center; border-radius: 99px; background: #e5e5dc; color: #545a53; font-size: 10px; font-weight: 800; }
@@ -400,6 +401,7 @@
   .content { padding: 0 !important; }
   .board { margin: 0 !important; padding: 0 !important; position: static !important; display: block !important; overflow: visible !important; }
   .orderColumn { display: none !important; }
+  .columnScroll { max-height: none !important; overflow: visible !important; }
   .printingOrderColumn { display: block !important; }
   .orderCard:not(.printingOrder) { display: none !important; }
   .printingOrder { width: 100%; max-width: 76mm; margin: 0 !important; padding: 0 !important; position: static !important; border: 0 !important; border-radius: 0 !important; background: white !important; box-shadow: none !important; color: black !important; font-family: monospace !important; break-inside: avoid; }

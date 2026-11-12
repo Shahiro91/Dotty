@@ -31,7 +31,7 @@ export async function loadStorefrontCatalog(businessId) {
               r.reward_type AS "rewardType", r.product_id AS "productId",
               r.discount_type AS "discountType", r.discount_value AS "discountValue",
               r.discount_scope AS "discountScope", dc.name AS "discountCategory",
-              r.points_cost AS "pointsCost", p.name AS "productName", p.category AS "productCategory", p.price AS "productPrice",
+              r.points_cost AS "pointsCost", r.available_days AS "availableDays", p.name AS "productName", p.category AS "productCategory", p.price AS "productPrice",
               p.image_data_url AS "productImageDataUrl"
        FROM business_rewards r LEFT JOIN business_products p ON p.id = r.product_id AND p.business_id = r.business_id AND p.is_available = TRUE
        LEFT JOIN business_categories dc ON dc.id = r.discount_category_id
@@ -53,7 +53,7 @@ export async function loadStorefrontCatalog(businessId) {
        JOIN business_products bp ON bp.id = NULLIF(line.value->>'id', '')::bigint AND bp.business_id = o.business_id
        WHERE o.business_id = $1 AND o.status <> 'cancelled' AND bp.is_available = TRUE
          AND COALESCE(line.value->>'isReward', 'false') <> 'true'
-       GROUP BY bp.id ORDER BY SUM((line.value->>'quantity')::int) DESC, bp.name LIMIT 6`,
+       GROUP BY bp.id ORDER BY SUM((line.value->>'quantity')::int) DESC, bp.name LIMIT 5`,
       [businessId],
     ),
     pool.query('SELECT id, original_name AS name, size_bytes AS "sizeBytes" FROM business_videos WHERE business_id = $1 ORDER BY created_at, id', [businessId]),

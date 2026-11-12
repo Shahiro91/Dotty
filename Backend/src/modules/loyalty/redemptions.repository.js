@@ -44,7 +44,7 @@ export async function findBusinessId(client, slug) {
 
 export async function lockAvailableReward(client, businessId, rewardId) {
   const { rows } = await client.query(
-    `SELECT id, name, points_cost, reward_type, product_id FROM business_rewards
+    `SELECT id, name, points_cost, reward_type, product_id, available_days FROM business_rewards
      WHERE id = $1 AND business_id = $2 AND is_available = TRUE FOR UPDATE`,
     [rewardId, businessId],
   )

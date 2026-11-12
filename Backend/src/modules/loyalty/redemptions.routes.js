@@ -16,6 +16,7 @@ export function publicRedemptionRoutes(authenticate) {
       if (result.error === 'business_suspended') return res.status(403).json({ error: 'Este local no está disponible por el momento.' })
       if (result.error === 'reward_not_found') return res.status(404).json({ error: 'Ese canje ya no está disponible.' })
       if (result.error === 'requires_order') return res.status(400).json({ error: 'Este canje debe agregarse al pedido antes de confirmarlo.' })
+      if (result.error === 'unavailable_today') return res.status(400).json({ error: 'Ese canje no está disponible hoy.' })
       if (result.error === 'insufficient_points') return res.status(400).json({ error: 'Todavía no tenés puntos suficientes para ese canje.' })
       res.status(201).json(result)
     } catch (error) {

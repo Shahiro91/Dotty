@@ -4,6 +4,7 @@ import { lockPoints, adjustPoints } from '../loyalty/points.repository.js'
 import { publicCustomer } from '../auth/auth.shared.js'
 import { lockOrderCustomer, lockDiscountReward, lockProductReward, insertFulfilledRedemption, findEligibleReferrer, hasPreviousOrder, insertOrder, findOrderCustomer } from './order-write.repository.js'
 import { calculateDiscount } from './discount.js'
+import { isAvailableToday } from '../businesses/business.rules.js'
 
 const publicCodeAlphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 function generatePublicCode() {
@@ -40,6 +41,11 @@ export async function persistOrder({ customerId, businessId, discountRewardId, p
         transactionStarted = false
         return { status: 404, body: { error: 'Ese descuento ya no está disponible.' } }
       }
+      if (!isAvailableToday(discountReward.available_days)) {
+        await client.query('ROLLBACK')
+        transactionStarted = false
+        return { status: 400, body: { error: 'Ese descuento no está disponible hoy.' } }
+      }
       if (currentPoints < discountReward.points_cost) {
         await client.query('ROLLBACK')
         transactionStarted = false
@@ -63,6 +69,11 @@ export async function persistOrder({ customerId, businessId, discountRewardId, p
         await client.query('ROLLBACK')
         transactionStarted = false
         return { status: 404, body: { error: 'Ese producto de canje ya no está disponible.' } }
+      }
+      if (!isAvailableToday(productReward.available_days)) {
+        await client.query('ROLLBACK')
+        transactionStarted = false
+        return { status: 400, body: { error: 'Ese canje no está disponible hoy.' } }
       }
       if (currentPoints < productReward.points_cost) {
         await client.query('ROLLBACK')

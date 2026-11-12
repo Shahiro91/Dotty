@@ -9,6 +9,12 @@ import styles from './LocalStorefront.module.css'
 const LocationPicker = lazy(() => import('./LocationPicker.jsx'))
 
 const paymentLabels = { mercado_pago: 'Mercado Pago', cash: 'Efectivo' }
+const dayNames = { 0: 'domingos', 1: 'lunes', 2: 'martes', 3: 'miércoles', 4: 'jueves', 5: 'viernes', 6: 'sábados' }
+function formatRewardDays(days = []) {
+  const names = [1, 2, 3, 4, 5, 6, 0].filter((day) => days.includes(day)).map((day) => dayNames[day])
+  return `los ${names.length > 1 ? `${names.slice(0, -1).join(', ')} y ${names.at(-1)}`   : names[0]}`
+}
+
 function calculateCartDiscount(reward, cart) {
   const lineTotal = (item) => Number(item.price) * item.quantity
   const scope = reward.discountScope || 'total'
@@ -230,7 +236,7 @@ function LocalStorefront({ slug, session, onAuthenticate, onSignOut, isPreview =
       <div className={styles.productInfo}>
         <span className={styles.category}>{product.category}{bestSellerIds.has(product.id) && <em className={styles.bestSellerBadge}><Flame size={11} /> Más vendido</em>}</span><h3>{product.name}</h3>
         <p>{product.description}</p>
-        <div className={styles.productBottom}><strong>{currency.format(product.price)}{productFractionalParts > 0 && <small> / parte</small>}</strong><span><Award size={14} /> +{product.pointsPerUnit * pointsMultiplier} pts</span></div>
+        <div className={styles.productBottom}><strong>{currency.format(product.price)}{productFractionalParts > 0 && <small> / parte</small>}</strong><span><Award size={14} /> {pointsMultiplier > 1 && <s className={styles.oldPoints}>+{product.pointsPerUnit} pts</s>} <b className={pointsMultiplier > 1 ? styles.doublePoints : undefined}>+{product.pointsPerUnit * pointsMultiplier} pts</b></span></div>
         {productFractionalParts > 0
           ? <button className={styles.addButton} type="button" disabled={isPreview || selectedPartsForProductCategory >= productFractionalParts} onClick={() => { setActiveCategory(product.category); setFractionalSelections((current) => current.length && current[0].category !== product.category ? [product] : [...current, product]) }}>{selectedProductParts ? `Agregar otra parte · ${selectedProductParts} elegida${selectedProductParts > 1 ? 's' : ''}` : 'Elegir esta parte'} <Plus size={15} /></button>
           : productAddons.length > 0
@@ -291,7 +297,7 @@ function LocalStorefront({ slug, session, onAuthenticate, onSignOut, isPreview =
   const isCustomer = !isPreview && session?.user?.role === 'customer'
   const suggestedDiscount = isCustomer && !selectedReward
     ? rewards
-      .filter((reward) => reward.rewardType === 'discount' && reward.discountScope !== 'total' && reward.pointsCost <= userPoints)
+      .filter((reward) => reward.rewardType === 'discount' && reward.discountScope !== 'total' && reward.pointsCost <= userPoints && reward.availableToday !== false)
       .map((reward) => ({ reward, saving: calculateCartDiscount(reward, cart) }))
       .filter((option) => option.saving > 0)
       .sort((a, b) => b.saving - a.saving)[0]
@@ -453,6 +459,10 @@ function LocalStorefront({ slug, session, onAuthenticate, onSignOut, isPreview =
       setIsAuthOpen(true)
       return
     }
+    if (reward.availableToday === false) {
+      setError(`Este canje solo está disponible ${formatRewardDays(reward.availableDays)}.`)
+      return
+    }
     if (session.user.points < reward.pointsCost) {
       setError('Todavía no tenés puntos suficientes para este canje.')
       return
@@ -510,7 +520,7 @@ function LocalStorefront({ slug, session, onAuthenticate, onSignOut, isPreview =
           </div>
         </div>
       </section>
-      {business.bonusPointsActiveToday && <div className={styles.bonusNotice}><Award size={16} /><span>Hoy sumás el doble de puntos en todos tus pedidos.</span></div>}
+      {business.bonusPointsActiveToday && <div className={styles.bonusNotice}><Award size={16} /><span>Hoy sumás el doble de puntos en todos tus pedidos. Los puntos normales aparecen tachados.</span></div>}
       {trackedOrder && <section className={`${styles.orderTrackingNotice} ${styles[`orderTracking_${trackedOrder.status}`] || ''}`} role="status">
         <div><strong>{orderTrackingCopy[trackedOrder.status]?.title || 'Estado del pedido'}</strong><p>Pedido #{trackedOrder.id} · {orderTrackingCopy[trackedOrder.status]?.message || ''}</p></div>
         <button type="button" aria-label="Ocultar seguimiento del pedido" onClick={() => { window.localStorage.removeItem(orderTrackingStorageKey); setTrackedOrderId(''); setTrackedOrder(null) }}><X size={17} /></button>
@@ -550,7 +560,7 @@ function LocalStorefront({ slug, session, onAuthenticate, onSignOut, isPreview =
           {products.length === 0 && <p className={styles.empty}>Este local todavía está preparando su menú.</p>}
           {bestSellers.length > 0 && <section className={styles.bestSellersSection} aria-label="Más vendidos">
             <div className={styles.sectionHead}><div><span className={styles.eyebrow}>Los favoritos</span><h2>Más vendidos</h2></div></div>
-            <div className={styles.productGrid}>{orderedBestSellers.map(renderProduct)}</div>
+            <div className={`${styles.productGrid} ${styles.bestSellersRow}`}>{orderedBestSellers.map(renderProduct)}</div>
           </section>}
           {products.length > 0 && <>
             <div className={styles.sectionHead}><div><span className={styles.eyebrow}>El menú</span><h2>Productos</h2></div><span>{visibleProducts.length} opciones</span></div>
@@ -575,7 +585,8 @@ function LocalStorefront({ slug, session, onAuthenticate, onSignOut, isPreview =
                 {reward.rewardType === 'discount' && <span className={styles.rewardTypeTag}>{reward.discountType === 'percentage' ? `${reward.discountValue}% de descuento` : `${currency.format(reward.discountValue)} de descuento`}{reward.discountScope === 'product' ? ` en ${reward.productName}` : reward.discountScope === 'category' ? ` en ${reward.discountCategory}` : ''}</span>}
                 {reward.rewardType === 'product' && reward.productId && <span className={styles.rewardTypeTag}>Producto: {reward.productName}</span>}
                 <span className={styles.rewardCost}><Award size={15} /> {reward.pointsCost} pts</span><h3>{reward.name}</h3><p>{reward.rewardType === 'product' && reward.productId ? `${reward.productName} · ${currency.format(reward.productPrice)}` : reward.description}</p>
-                <button className={styles.redeemButton} type="button" aria-pressed={reward.productId || reward.rewardType === 'discount' ? isRewardSelected : undefined} disabled={isPreview || redeemingId === reward.id} onClick={() => redeemReward(reward)}>
+                {reward.availableDays?.length > 0 && <small className={styles.rewardDays}>Válido {formatRewardDays(reward.availableDays)}{reward.availableToday === false ? ' · no disponible hoy' : ''}</small>}
+                <button className={styles.redeemButton} type="button" aria-pressed={reward.productId || reward.rewardType === 'discount' ? isRewardSelected : undefined} disabled={isPreview || redeemingId === reward.id || (reward.availableToday === false && !isRewardSelected)} onClick={() => redeemReward(reward)}>
                   {redeemingId === reward.id ? 'Solicitando...' : reward.rewardType === 'discount' || reward.productId ? isRewardSelected ? 'Quitar del pedido' : 'Agregar al pedido' : 'Canjear'}
                 </button>
               </article>
@@ -604,7 +615,7 @@ function LocalStorefront({ slug, session, onAuthenticate, onSignOut, isPreview =
             {selectedDiscountReward && <div className={styles.discountLine}><span>{selectedDiscountReward.name}</span><strong>−{currency.format(discountAmount)}</strong><button type="button" aria-label="Quitar descuento" onClick={() => setSelectedRewardId(null)}><X size={13} /></button></div>}
             {discountNotApplicable && <p className={styles.discountWarning}>Este descuento no aplica a los productos de tu pedido. Agregá {selectedDiscountReward.discountScope === 'category' ? `un producto de ${selectedDiscountReward.discountCategory}` : selectedDiscountReward.productName} para usarlo.</p>}
             <div className={styles.total}><span>Total</span><strong>{currency.format(finalTotal)}</strong></div>
-            <div className={styles.earned}><Award size={15} /> Sumás {pointsTotal} puntos{business.bonusPointsActiveToday ? ' (dobles hoy)' : ''}</div>
+            <div className={styles.earned}><Award size={15} /> Sumás {business.bonusPointsActiveToday && <s className={styles.oldPoints}>{pointsTotal / pointsMultiplier}</s>} <b className={business.bonusPointsActiveToday ? styles.doublePoints : undefined}>{pointsTotal}</b> puntos{business.bonusPointsActiveToday ? ' (dobles hoy)' : ''}</div>
             <div className={styles.checkoutForm}>
               <label><span>Nombre</span><input type="text" autoComplete="given-name" maxLength={60} value={customerFirstName} onChange={(event) => setCustomerFirstName(event.target.value)} /></label>
               <label><span>Apellido (opcional)</span><input type="text" autoComplete="family-name" maxLength={60} value={customerLastName} onChange={(event) => setCustomerLastName(event.target.value)} /></label>
