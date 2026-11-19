@@ -28,9 +28,17 @@ El administrador usa solo el email `mariaquintana520@gmail.com` y la contraseña
 
 Las solicitudes anteriores pendientes, contactadas o aprobadas sin activar se activan al ingresar con las credenciales de la cuenta asociada; su prueba comienza entonces. Las solicitudes rechazadas no se activan. Los locales ya activos conservan su vencimiento al ingresar.
 
-Para ejecutar las pruebas, configurá `TEST_DATABASE_URL` con una base PostgreSQL de pruebas y ejecutá `node --test test/phone-order.test.js test/billing-rules.test.js test/order-schema.test.js test/order-items.test.js` desde `Backend`. La prueba de integración crea y elimina un esquema aislado. Mercado Pago se simula exclusivamente en el proceso de prueba: no se realizan pagos ni llamadas reales al servicio.
+Para ejecutar las pruebas, configurá `TEST_DATABASE_URL` con una base PostgreSQL de pruebas y ejecutá `node --test test/phone-order.test.js test/billing-rules.test.js test/order-schema.test.js test/order-items.test.js test/push-notifications.test.js test/push-integration.test.js` desde `Backend`. Las pruebas de integración crean y eliminan esquemas aislados. Mercado Pago y los envíos push se simulan: no se realizan pagos ni llamadas reales a estos servicios.
 
-La integración comprueba que los 56 métodos y rutas de API incluidos en `test/fixtures/api-coverage.js` reciben al menos una respuesta exitosa; además verifica respuestas y errores en distintos flujos. El inventario debe actualizarse cuando cambien los endpoints. Esta comprobación no cubre todos los escenarios ni reemplaza una prueba con el sandbox real de Mercado Pago. Sin `TEST_DATABASE_URL`, la integración se omite.
+La integración comprueba que los métodos y rutas de API incluidos en `test/fixtures/api-coverage.js` reciben al menos una respuesta exitosa; además verifica respuestas y errores en distintos flujos. El inventario debe actualizarse cuando cambien los endpoints. Esta comprobación no cubre todos los escenarios ni reemplaza una prueba con el sandbox real de Mercado Pago. Sin `TEST_DATABASE_URL`, la integración se omite.
+
+## Notificaciones web
+
+Los clientes que tengan al menos un pedido no cancelado pueden activar las notificaciones de cada local desde su tienda, en cada dispositivo. El navegador pide permiso solo al pulsar «Activar notificaciones»; el cliente puede desactivarlas desde la misma tienda. Se avisa al crear o importar nuevos canjes, al reactivar canjes mediante importación y al cambiar los días de puntos dobles. No se envían avisos por editar canjes existentes. Los avisos abren la tienda del local.
+
+Para habilitarlas, generá una sola vez un par de claves desde `Backend` con `npx web-push generate-vapid-keys`. Configurá `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` y `VAPID_SUBJECT` (por ejemplo, `mailto:contacto@tudominio.com`) en el entorno del backend. En Render agregalas como variables de entorno privadas. Conservá el mismo par entre despliegues y no compartas la clave privada; si cambiás las claves, los clientes deberán borrar los datos del sitio y volver a suscribirse. Sin las tres variables la función queda desactivada; una configuración incompleta impide el inicio.
+
+Las notificaciones requieren HTTPS (o localhost) y un navegador compatible. En iPhone y iPad Web Push requiere una aplicación web instalada en la pantalla de inicio; este sitio aún no ofrece instalación como aplicación, por lo que esa plataforma no está cubierta. Los envíos son de mejor esfuerzo, sin cola persistente ni garantía de entrega; los errores se registran en el servidor y las suscripciones vencidas se eliminan.
 
 ## Organización del backend
 

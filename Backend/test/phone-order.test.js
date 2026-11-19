@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
-import { randomBytes } from 'node:crypto'
+import { createECDH, randomBytes } from 'node:crypto'
 import { createServer } from 'node:net'
 import { once } from 'node:events'
 import { test } from 'node:test'
 import bcrypt from 'bcryptjs'
 import pg from 'pg'
+import webPush from 'web-push'
 import { assertApiCoverage } from './fixtures/api-coverage.js'
 
 const databaseUrl = process.env.TEST_DATABASE_URL
@@ -41,6 +42,7 @@ test('phone login, orders and partner access', { skip: !databaseUrl, timeout: 60
   await new Promise((resolve) => socket.close(resolve))
 
   const jwtSecret = 'test-secret-with-at-least-32-characters'
+  const vapid = webPush.generateVAPIDKeys()
   server = spawn(process.execPath, ['server.js'], {
     cwd: new URL('..', import.meta.url),
     env: {
@@ -49,6 +51,9 @@ test('phone login, orders and partner access', { skip: !databaseUrl, timeout: 60
       PGOPTIONS: `-c search_path=${schema}`,
       PGSSL: 'false',
       JWT_SECRET: jwtSecret,
+      VAPID_PUBLIC_KEY: vapid.publicKey,
+      VAPID_PRIVATE_KEY: vapid.privateKey,
+      VAPID_SUBJECT: 'mailto:test@example.test',
       ADMIN_PASSWORD_1: 'admin-test-password',
       MP_ACCESS_TOKEN: 'TEST-local-only',
       MP_ENVIRONMENT: 'sandbox',
@@ -204,6 +209,15 @@ test('phone login, orders and partner access', { skip: !databaseUrl, timeout: 60
   assert.equal(login.data.user.phone, '11112222')
   assert.equal(login.data.user.points, 0)
   const token = login.data.token
+  const pushKey = createECDH('prime256v1')
+  pushKey.generateKeys()
+  const pushSubscription = {
+    endpoint: 'https://fcm.googleapis.com/fcm/send/integration-test',
+    keys: { p256dh: pushKey.getPublicKey().toString('base64url'), auth: randomBytes(16).toString('base64url') },
+  }
+  const pushPath = '/public/businesses/test/push'
+  assert.equal((await request(`${pushPath}/status`, { token, body: {} })).data.eligible, false)
+  assert.equal((await request(`${pushPath}/subscribe`, { token, body: { subscription: pushSubscription } })).status, 403)
   const { rows: [customer] } = await db.query("SELECT password_hash, first_name, last_name FROM customers WHERE phone = '11112222'")
   assert.deepEqual(customer, { password_hash: null, first_name: '', last_name: '' })
   assert.equal((await request('/auth/claim-business', { token, body: { code: 'ABCD-EFGH' } })).status, 404)
@@ -222,6 +236,12 @@ test('phone login, orders and partner access', { skip: !databaseUrl, timeout: 60
   assert.equal((await request('/orders', { token, body: { ...orderBody, customerFirstName: '' } })).status, 400)
   const order = await request('/orders', { token, body: orderBody })
   assert.equal(order.status, 201)
+  assert.equal((await request(`${pushPath}/subscribe`, { token, body: { subscription: { ...pushSubscription, endpoint: 'https://example.test/push' } } })).status, 400)
+  assert.equal((await request(`${pushPath}/subscribe`, { token, body: { subscription: pushSubscription } })).status, 200)
+  assert.equal((await request(`${pushPath}/status`, { token, body: { endpoint: pushSubscription.endpoint } })).data.subscribed, true)
+  assert.equal((await request(`${pushPath}/status`, { token: legacyLogin.data.token, body: { endpoint: pushSubscription.endpoint } })).data.subscribed, false)
+  assert.equal((await request(`${pushPath}/unsubscribe`, { token, body: { endpoint: pushSubscription.endpoint } })).status, 200)
+  assert.equal((await request(`${pushPath}/status`, { token, body: { endpoint: pushSubscription.endpoint } })).data.subscribed, false)
   assert.equal(order.data.user.points, 5)
   assert.equal(order.data.order.customerFirstName, 'Ana')
   assert.equal((await request(`/orders/${order.data.order.id}/status`, { token })).data.status, 'in_process')

@@ -49,7 +49,7 @@ export async function findAvailableProduct(client, businessId, name, category) {
 
 export async function saveReward(client, businessId, reward, productId) {
   const { rows } = await client.query(
-    'SELECT id FROM business_rewards WHERE business_id = $1 AND lower(name) = lower($2) ORDER BY is_available DESC, id LIMIT 1 FOR UPDATE',
+    'SELECT id, is_available FROM business_rewards WHERE business_id = $1 AND lower(name) = lower($2) ORDER BY is_available DESC, id LIMIT 1 FOR UPDATE',
     [businessId, reward.name],
   )
   if (rows[0]) {
@@ -58,12 +58,12 @@ export async function saveReward(client, businessId, reward, productId) {
        product_id = $4, discount_type = $5, discount_value = $6, is_available = TRUE WHERE id = $7`,
       [reward.description, reward.pointsCost, reward.rewardType, productId, reward.discountType, reward.discountValue, rows[0].id],
     )
-    return false
+    return { created: false, newlyAvailable: !rows[0].is_available }
   }
   await client.query(
     `INSERT INTO business_rewards (business_id, name, description, reward_type, product_id, discount_type, discount_value, points_cost)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
     [businessId, reward.name, reward.description, reward.rewardType, productId, reward.discountType, reward.discountValue, reward.pointsCost],
   )
-  return true
+  return { created: true, newlyAvailable: true }
 }

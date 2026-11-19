@@ -15,6 +15,7 @@ export async function importCatalog(businessId, input) {
       return { error: 'Cada producto debe pertenecer a una categoría existente o incluida en el archivo.' }
     }
     const counts = { categoriesCreated: 0, productsCreated: 0, productsUpdated: 0, rewardsCreated: 0, rewardsUpdated: 0 }
+    let hasNewRewards = false
     for (const name of input.importedCategories) counts.categoriesCreated += await insertCategory(client, businessId, name)
     for (const product of input.products) {
       if (await saveProduct(client, businessId, product)) counts.productsCreated += 1
@@ -31,12 +32,14 @@ export async function importCatalog(businessId, input) {
         }
         productId = product.id
       }
-      if (await saveReward(client, businessId, reward, productId)) counts.rewardsCreated += 1
+      const saved = await saveReward(client, businessId, reward, productId)
+      if (saved.created) counts.rewardsCreated += 1
       else counts.rewardsUpdated += 1
+      hasNewRewards ||= saved.newlyAvailable
     }
     await client.query('COMMIT')
     started = false
-    return { counts }
+    return { counts, hasNewRewards }
   } catch (error) {
     if (started) await client.query('ROLLBACK')
     throw error

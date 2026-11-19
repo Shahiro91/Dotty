@@ -26,6 +26,7 @@ import { storefrontRoutes } from './src/modules/businesses/storefront.routes.js'
 import { partnerBusinessRoutes } from './src/modules/businesses/partner-business.routes.js'
 import { adminRoutes } from './src/modules/admin/admin.routes.js'
 import { adminSupportRoutes, partnerSupportRoutes } from './src/modules/support/support.routes.js'
+import { pushRoutes } from './src/modules/notifications/push.routes.js'
 
 const app = express()
 
@@ -44,6 +45,8 @@ app.use('/api', videoRoutes)
 app.use('/api/public', storefrontRoutes)
 
 app.use('/api/public', publicRedemptionRoutes(authenticate))
+
+app.use('/api/public', pushRoutes)
 
 app.use('/api/auth', authRoutes)
 

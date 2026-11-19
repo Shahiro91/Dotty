@@ -1,0 +1,5 @@
+.notifications { width: min(1160px, calc(100% - 40px)); box-sizing: border-box; margin: 18px auto 0; padding: 18px 22px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid #e6e5df; border-radius: 10px; background: #fff; color: #282c29; font-size: 13px; }
+.notifications p { margin: 5px 0 0; color: #656c64; }
+.notifications button { padding: 10px 15px; border: 0; border-radius: 8px; background: var(--store-primary); color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+.notifications button:disabled { opacity: .6; cursor: wait; }
+.notifications .error { width: 100%; color: #a42a23; }

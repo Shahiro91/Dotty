@@ -4,6 +4,7 @@ import { apiRequest, apiUrl } from '../lib/api.js'
 import { getBusinessFontVariables } from '../lib/businessStyle.js'
 import { currency } from '../data/menu.js'
 import AuthModal from './AuthModal.jsx'
+import PushNotifications from './PushNotifications.jsx'
 import styles from './LocalStorefront.module.css'
 
 const LocationPicker = lazy(() => import('./LocationPicker.jsx'))
@@ -521,6 +522,7 @@ function LocalStorefront({ slug, session, onAuthenticate, onSignOut, isPreview =
         </div>
       </section>
       {business.bonusPointsActiveToday && <div className={styles.bonusNotice}><Award size={16} /><span>Hoy sumás el doble de puntos en todos tus pedidos.</span></div>}
+      {!isPreview && session?.user?.role === 'customer' && <PushNotifications slug={slug} token={session.token} orderId={trackedOrderId} />}
       {trackedOrder && <section className={`${styles.orderTrackingNotice} ${styles[`orderTracking_${trackedOrder.status}`] || ''}`} role="status">
         <div><strong>{orderTrackingCopy[trackedOrder.status]?.title || 'Estado del pedido'}</strong><p>Pedido #{trackedOrder.id} · {orderTrackingCopy[trackedOrder.status]?.message || ''}</p></div>
         <button type="button" aria-label="Ocultar seguimiento del pedido" onClick={() => { window.localStorage.removeItem(orderTrackingStorageKey); setTrackedOrderId(''); setTrackedOrder(null) }}><X size={17} /></button>

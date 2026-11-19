@@ -213,6 +213,16 @@ export async function initializeDatabase() {
     ALTER TABLE customer_orders DROP CONSTRAINT IF EXISTS customer_orders_total_check;
     ALTER TABLE customer_orders ADD CONSTRAINT customer_orders_total_check CHECK (total >= 0);
     CREATE INDEX IF NOT EXISTS customer_orders_business_status_idx ON customer_orders (business_id, status, created_at DESC);
+    CREATE TABLE IF NOT EXISTS push_subscriptions (
+      endpoint TEXT NOT NULL,
+      business_id BIGINT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+      customer_id BIGINT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+      p256dh TEXT NOT NULL,
+      auth TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (endpoint, business_id)
+    );
+    CREATE INDEX IF NOT EXISTS push_subscriptions_business_idx ON push_subscriptions (business_id);
     CREATE TABLE IF NOT EXISTS customer_business_points (
       customer_id BIGINT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
       business_id BIGINT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,

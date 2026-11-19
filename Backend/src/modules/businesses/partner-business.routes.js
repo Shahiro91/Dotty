@@ -5,6 +5,7 @@ import { hasDoublePointsToday } from './business.rules.js'
 import { getPlan, getReferralSetting, setBonusDays, setReferrals, updateBusiness, updateOption } from './partner-business.repository.js'
 import { readBusinessInput, readBusinessOption } from './partner-business.schema.js'
 import { createReferralCode, loadOverview } from './partner-business.service.js'
+import { notifyBusinessCustomers } from '../notifications/push.service.js'
 
 const router = Router()
 router.get('/partner/overview', authenticate, requirePartnerBilling, async (req, res, next) => {
@@ -26,8 +27,12 @@ router.patch('/partner/bonus-days', authenticate, requirePartner, async (req, re
       || new Set(days).size !== days.length) {
       return res.status(400).json({ error: 'Elegí días válidos para la bonificación.' })
     }
-    const bonusPointsDays = await setBonusDays(req.businessId, days)
+    const { bonusPointsDays, changed } = await setBonusDays(req.businessId, days)
     res.json({ bonusPointsDays, bonusPointsActiveToday: hasDoublePointsToday('vip', bonusPointsDays) })
+    if (changed) {
+      const message = bonusPointsDays.length ? 'Cambió la promoción de puntos dobles. ¡Consultá los días disponibles!' : 'La promoción de puntos dobles ya no está disponible.'
+      notifyBusinessCustomers(req.businessId, message).catch((error) => console.error('Error al enviar notificaciones:', error.message))
+    }
   } catch (error) { next(error) }
 })
 

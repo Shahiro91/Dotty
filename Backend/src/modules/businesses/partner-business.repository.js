@@ -28,11 +28,13 @@ export async function getPlan(businessId) {
 
 export async function setBonusDays(businessId, days) {
   const { rows } = await pool.query(
-    `UPDATE businesses SET bonus_points_days = $1 WHERE id = $2
-     RETURNING bonus_points_days AS "bonusPointsDays"`,
+    `WITH previous AS (SELECT bonus_points_days FROM businesses WHERE id = $2 FOR UPDATE)
+     UPDATE businesses SET bonus_points_days = $1 FROM previous WHERE id = $2
+     RETURNING businesses.bonus_points_days AS "bonusPointsDays",
+       NOT (previous.bonus_points_days @> businesses.bonus_points_days AND previous.bonus_points_days <@ businesses.bonus_points_days) AS changed`,
     [days, businessId],
   )
-  return rows[0].bonusPointsDays
+  return rows[0]
 }
 
 export async function setReferrals(businessId, enabled, points) {

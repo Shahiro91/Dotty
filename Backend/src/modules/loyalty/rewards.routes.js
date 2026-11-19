@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { categoryExists, disableReward, insertReward, listRewards, productIsAvailable, updateReward } from './rewards.repository.js'
 import { readRewardInput } from './rewards.schema.js'
+import { notifyBusinessCustomers } from '../notifications/push.service.js'
 
 async function validateRewardTarget(businessId, reward) {
   if (reward.rewardType === 'product' || reward.discountScope === 'product') {
@@ -29,7 +30,9 @@ export function rewardRoutes(authenticate, requirePartner) {
     try {
       const targetError = await validateRewardTarget(req.businessId, reward)
       if (targetError) return res.status(400).json({ error: targetError })
-      res.status(201).json({ reward: await insertReward(req.businessId, reward) })
+      const created = await insertReward(req.businessId, reward)
+      res.status(201).json({ reward: created })
+      notifyBusinessCustomers(req.businessId, `Nuevo canje: ${created.name}`).catch((error) => console.error('Error al enviar notificaciones:', error.message))
     } catch (error) {
       next(error)
     }
