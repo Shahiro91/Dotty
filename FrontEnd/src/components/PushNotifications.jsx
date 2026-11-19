@@ -23,7 +23,7 @@ export default function PushNotifications({ slug, token, orderId }) {
       try {
         const registration = await navigator.serviceWorker.register('/push-sw.js')
         const subscription = await registration.pushManager.getSubscription()
-        const result = await apiRequest(`${path}/status`, { token, body: { endpoint: subscription?.endpoint || '' } })
+        const result = await apiRequest(`${path}/status`, { method: 'POST', token, body: { endpoint: subscription?.endpoint || '' } })
         if (active) setStatus(result)
       } catch (requestError) {
         if (active) setError(`No pudimos consultar las notificaciones: ${requestError.message}`)
@@ -51,7 +51,7 @@ export default function PushNotifications({ slug, token, orderId }) {
       } else {
         subscription = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: decodeKey(status.publicKey) })
       }
-      await apiRequest(`${path}/subscribe`, { token, body: { subscription: subscription.toJSON() } })
+      await apiRequest(`${path}/subscribe`, { method: 'POST', token, body: { subscription: subscription.toJSON() } })
       setStatus((current) => ({ ...current, subscribed: true }))
     } catch (requestError) { setError(requestError.message) } finally { setBusy(false) }
   }
@@ -62,7 +62,7 @@ export default function PushNotifications({ slug, token, orderId }) {
     try {
       const registration = await navigator.serviceWorker.ready
       const subscription = await registration.pushManager.getSubscription()
-      if (subscription) await apiRequest(`${path}/unsubscribe`, { token, body: { endpoint: subscription.endpoint } })
+      if (subscription) await apiRequest(`${path}/unsubscribe`, { method: 'POST', token, body: { endpoint: subscription.endpoint } })
       setStatus((current) => ({ ...current, subscribed: false }))
     } catch (requestError) { setError(requestError.message) } finally { setBusy(false) }
   }
