@@ -513,7 +513,7 @@ function LocalStorefront({ slug, session, onAuthenticate, onSignOut, isPreview =
         <div className={styles.heroContent}>
           {business.logoDataUrl && <span className={styles.heroLogoFrame}><img src={business.logoDataUrl} alt={`Logo de ${business.name}`} /></span>}
           <h1>{business.name}</h1>
-          <p>{business.description || 'Productos hechos para disfrutar.'}</p>
+          {business.description && <p>{business.description}</p>}
           <div className={styles.details}>
             {business.address && <span><MapPin size={15} /> {business.address}</span>}
             {business.openingHours && <span><Clock3 size={15} /> {formatTodaysOpeningHours(business.openingHours)}</span>}
