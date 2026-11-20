@@ -46,7 +46,8 @@ test('delivery sends the store link and removes expired subscriptions', async ()
     if (recipient.endpoint === expired.endpoint) throw Object.assign(new Error('expired'), { statusCode: 410 })
   }
   try {
-    await notifyBusinessCustomers(42, 'Nuevo canje')
+    const result = await notifyBusinessCustomers(42, 'Nuevo canje')
+    assert.deepEqual(result, { eligible: 2, sent: 1, failed: 1 })
     assert.equal(sent.length, 2)
     assert.deepEqual(sent[0].payload, { title: 'Local', body: 'Nuevo canje', url: '/local/local-prueba' })
     assert.equal(sent[0].options.TTL, 86400)

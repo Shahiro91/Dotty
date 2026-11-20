@@ -1,11 +1,12 @@
 import { Router } from 'express'
 import { authenticate } from '../../middleware/authenticate.js'
-import { requireCustomer, requirePartner, requirePartnerBilling } from '../../middleware/authorize.js'
+import { requireCustomer, requirePartner, requirePartnerBilling, requireVipPlus } from '../../middleware/authorize.js'
 import { hasDoublePointsToday } from './business.rules.js'
 import { getPlan, getReferralSetting, setBonusDays, setReferrals, updateBusiness, updateOption } from './partner-business.repository.js'
 import { readBusinessInput, readBusinessOption } from './partner-business.schema.js'
 import { createReferralCode, loadOverview } from './partner-business.service.js'
-import { notifyBusinessCustomers } from '../notifications/push.service.js'
+import { notifyBusinessCustomers, vapidPublicKey } from '../notifications/push.service.js'
+import { isVipPlan } from '../billing/billing.rules.js'
 
 const router = Router()
 router.get('/partner/overview', authenticate, requirePartnerBilling, async (req, res, next) => {
@@ -20,7 +21,7 @@ router.patch('/partner/bonus-days', authenticate, requirePartner, async (req, re
   try {
     const business = await getPlan(req.businessId)
     if (!business) return res.status(404).json({ error: 'No se encontró el local asociado.' })
-    if (business.plan !== 'vip') return res.status(403).json({ error: 'La bonificación de puntos dobles es exclusiva del Plan VIP.' })
+    if (!isVipPlan(business.plan)) return res.status(403).json({ error: 'La bonificación de puntos dobles es exclusiva de los planes VIP y VIP PLUS.' })
     const days = req.body?.days
     if (!Array.isArray(days) || days.length > 7
       || days.some((day) => !Number.isInteger(day) || day < 0 || day > 6)
@@ -33,6 +34,21 @@ router.patch('/partner/bonus-days', authenticate, requirePartner, async (req, re
       const message = bonusPointsDays.length ? 'Cambió la promoción de puntos dobles. ¡Consultá los días disponibles!' : 'La promoción de puntos dobles ya no está disponible.'
       notifyBusinessCustomers(req.businessId, message).catch((error) => console.error('Error al enviar notificaciones:', error.message))
     }
+  } catch (error) { next(error) }
+})
+
+router.post('/partner/notifications/custom', authenticate, requirePartner, requireVipPlus, async (req, res, next) => {
+  const message = typeof req.body?.message === 'string' ? req.body.message.trim() : ''
+  if (!message || message.length > 200) {
+    return res.status(400).json({ error: 'Escribí un mensaje de entre 1 y 200 caracteres.' })
+  }
+  if (!vapidPublicKey) return res.status(503).json({ error: 'Las notificaciones push todavía no están configuradas.' })
+  try {
+    const result = await notifyBusinessCustomers(req.businessId, message)
+    if (result.eligible > 0 && result.sent === 0) {
+      return res.status(502).json({ error: 'No pudimos entregar la notificación a los dispositivos elegibles. Probá de nuevo más tarde.' })
+    }
+    res.json(result)
   } catch (error) { next(error) }
 })
 

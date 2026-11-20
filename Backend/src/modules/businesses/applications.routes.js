@@ -28,8 +28,8 @@ router.post('/local-applications', rateLimit('application', 10, 60 * 60_000), as
   if (businessName.length < 2 || businessName.length > 100) {
     return res.status(400).json({ error: 'Ingresá el nombre del local (entre 2 y 100 caracteres).' })
   }
-  if (!['basic', 'vip'].includes(requestedPlan)) {
-    return res.status(400).json({ error: 'Elegí el plan Básico o VIP.' })
+  if (!['basic', 'vip', 'vip_plus'].includes(requestedPlan)) {
+    return res.status(400).json({ error: 'Elegí el plan Básico, VIP o VIP PLUS.' })
   }
   try {
     const result = await registerLocalApplication({ firstName, lastName, phone, email, password, businessName, requestedPlan })

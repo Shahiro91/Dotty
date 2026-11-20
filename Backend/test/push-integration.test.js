@@ -60,17 +60,27 @@ test('push subscriptions and publication stay scoped to eligible customers and l
     try { await fetch(`${base}/health`); ready = true; break } catch { await new Promise((resolve) => setTimeout(resolve, 100)) }
   }
   assert.ok(ready, output)
-  const { rows: [business] } = await db.query("INSERT INTO businesses (name, slug, plan) VALUES ('Local', 'local-test', 'vip') RETURNING id")
-  await db.query("INSERT INTO businesses (name, slug) VALUES ('Otro', 'otro-test')")
+  const { rows: [business] } = await db.query("INSERT INTO businesses (name, slug, plan) VALUES ('Local', 'local-test', 'vip_plus') RETURNING id")
+  const { rows: [otherBusiness] } = await db.query("INSERT INTO businesses (name, slug) VALUES ('Otro', 'otro-test') RETURNING id")
   const { rows: [customer] } = await db.query("INSERT INTO customers (phone, role) VALUES ('11112222', 'customer') RETURNING id")
+  const { rows: [otherCustomer] } = await db.query("INSERT INTO customers (phone, role) VALUES ('77778888', 'customer') RETURNING id")
   const { rows: [owner] } = await db.query("INSERT INTO customers (phone, role, business_id) VALUES ('33334444', 'local_owner', $1) RETURNING id", [business.id])
+  const { rows: [basicOwner] } = await db.query("INSERT INTO customers (phone, role, business_id) VALUES ('55556666', 'local_owner', $1) RETURNING id", [otherBusiness.id])
   const token = jwt.sign({ sub: String(customer.id), phoneOnly: true }, secret)
+  const otherCustomerToken = jwt.sign({ sub: String(otherCustomer.id), phoneOnly: true }, secret)
   const partnerToken = jwt.sign({ sub: String(owner.id) }, secret)
+  const basicPartnerToken = jwt.sign({ sub: String(basicOwner.id) }, secret)
   const key = createECDH('prime256v1')
   key.generateKeys()
   const subscription = {
     endpoint: 'https://fcm.googleapis.com/fcm/send/test',
     keys: { p256dh: key.getPublicKey().toString('base64url'), auth: randomBytes(16).toString('base64url') },
+  }
+  const otherKey = createECDH('prime256v1')
+  otherKey.generateKeys()
+  const otherSubscription = {
+    endpoint: 'https://fcm.googleapis.com/fcm/send/other',
+    keys: { p256dh: otherKey.getPublicKey().toString('base64url'), auth: randomBytes(16).toString('base64url') },
   }
   const path = '/public/businesses/local-test/push'
   assert.equal((await request(`${path}/subscribe`, token, { subscription })).status, 403)
@@ -78,36 +88,52 @@ test('push subscriptions and publication stay scoped to eligible customers and l
     "INSERT INTO customer_orders (customer_id, business_id, total, points_awarded, items) VALUES ($1, $2, 1, 0, '[]') RETURNING id",
     [customer.id, business.id],
   )
-  assert.equal((await request(`${path}/subscribe`, token, { subscription })).status, 200)
-  assert.equal((await request('/public/businesses/otro-test/push/subscribe', token, { subscription })).status, 403)
-  assert.equal((await request(`${path}/status`, token, { endpoint: subscription.endpoint })).data.subscribed, true)
+  await db.query(
+    "INSERT INTO customer_orders (customer_id, business_id, total, points_awarded, items) VALUES ($1, $2, 1, 0, '[]')",
+    [otherCustomer.id, otherBusiness.id],
+  )
   const waitForCount = async (count) => {
     for (let attempt = 0; attempt < 100 && notifications.length < count; attempt += 1) await new Promise((resolve) => setTimeout(resolve, 20))
     assert.equal(notifications.length, count)
   }
+  assert.equal((await request(`${path}/subscribe`, token, { subscription })).status, 200)
+  assert.equal((await request('/public/businesses/otro-test/push/subscribe', token, { subscription })).status, 403)
+  assert.equal((await request('/public/businesses/otro-test/push/subscribe', otherCustomerToken, { subscription: otherSubscription })).status, 200)
+  assert.equal((await request(`${path}/status`, token, { endpoint: subscription.endpoint })).data.subscribed, true)
+  assert.equal((await request('/partner/notifications/custom', partnerToken, { message: '   ' })).status, 400)
+  assert.equal((await request('/partner/notifications/custom', partnerToken, { message: 'x'.repeat(201) })).status, 400)
+  assert.equal((await request('/partner/notifications/custom', basicPartnerToken, { message: 'Oferta' })).status, 403)
+  const customNotification = await request('/partner/notifications/custom', partnerToken, { message: 'Oferta especial para vos' })
+  assert.equal(customNotification.status, 200)
+  assert.deepEqual(customNotification.data, { eligible: 1, sent: 1, failed: 0 })
+  await waitForCount(1)
+  assert.deepEqual(notifications[0], { endpoint: subscription.endpoint, payload: { title: 'Local', body: 'Oferta especial para vos', url: '/local/local-test' } })
   const reward = { name: 'Descuento', rewardType: 'discount', discountType: 'fixed', discountValue: 1, pointsCost: 1 }
   assert.equal((await request('/partner/rewards', partnerToken, reward)).status, 201)
-  await waitForCount(1)
-  assert.deepEqual(notifications[0], { endpoint: subscription.endpoint, payload: { title: 'Local', body: 'Nuevo canje: Descuento', url: '/local/local-test' } })
-  assert.equal((await request('/partner/bonus-days', partnerToken, { days: [1, 2] }, 'PATCH')).status, 200)
   await waitForCount(2)
+  assert.deepEqual(notifications[1], { endpoint: subscription.endpoint, payload: { title: 'Local', body: 'Nuevo canje: Descuento', url: '/local/local-test' } })
+  assert.equal((await request('/partner/bonus-days', partnerToken, { days: [1, 2] }, 'PATCH')).status, 200)
+  await waitForCount(3)
   assert.equal((await request('/partner/bonus-days', partnerToken, { days: [2, 1] }, 'PATCH')).status, 200)
   await new Promise((resolve) => setTimeout(resolve, 150))
-  assert.equal(notifications.length, 2)
+  assert.equal(notifications.length, 3)
   const importedReward = { ...reward, name: 'Importado' }
   assert.equal((await request('/partner/import-catalog', partnerToken, { rewards: [importedReward] })).status, 200)
-  await waitForCount(3)
+  await waitForCount(4)
   assert.equal((await request('/partner/import-catalog', partnerToken, { rewards: [importedReward] })).status, 200)
   await new Promise((resolve) => setTimeout(resolve, 150))
-  assert.equal(notifications.length, 3)
+  assert.equal(notifications.length, 4)
   const { rows: [imported] } = await db.query("SELECT id FROM business_rewards WHERE business_id = $1 AND name = 'Importado'", [business.id])
   await db.query('UPDATE business_rewards SET is_available = FALSE WHERE id = $1', [imported.id])
   assert.equal((await request('/partner/import-catalog', partnerToken, { rewards: [importedReward] })).status, 200)
-  await waitForCount(4)
+  await waitForCount(5)
   await db.query("UPDATE customer_orders SET status = 'cancelled' WHERE id = $1", [order.id])
+  const ineligibleNotification = await request('/partner/notifications/custom', partnerToken, { message: 'Oferta' })
+  assert.equal(ineligibleNotification.status, 200)
+  assert.deepEqual(ineligibleNotification.data, { eligible: 0, sent: 0, failed: 0 })
   assert.equal((await request('/partner/rewards', partnerToken, { ...reward, name: 'Otro canje' })).status, 201)
   await new Promise((resolve) => setTimeout(resolve, 150))
-  assert.equal(notifications.length, 4)
+  assert.equal(notifications.length, 5)
   assert.equal((await request(`${path}/unsubscribe`, token, { endpoint: subscription.endpoint })).status, 200)
   assert.equal((await request(`${path}/status`, token, { endpoint: subscription.endpoint })).data.subscribed, false)
 })

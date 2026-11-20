@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { AlertCircle, ArrowLeft, BarChart3, Check, ChevronDown, ChevronRight, CircleDollarSign, Copy, CreditCard, Eye, FileSpreadsheet, FolderOpen, History, ImagePlus, LoaderCircle, LogOut, Menu, MessageCircle, Package, Pencil, Plus, Printer, RefreshCw, Save, Sparkles, Store, ToggleLeft, ToggleRight, Trash2, Users, UserPlus, X } from 'lucide-react'
+import { AlertCircle, ArrowLeft, BarChart3, Check, ChevronDown, ChevronRight, CircleDollarSign, Copy, CreditCard, Eye, FileSpreadsheet, FolderOpen, History, ImagePlus, LoaderCircle, LogOut, Megaphone, Menu, MessageCircle, Package, Pencil, Plus, Printer, RefreshCw, Save, Sparkles, Store, ToggleLeft, ToggleRight, Trash2, Users, UserPlus, X } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 import { apiRequest } from '../lib/api.js'
 import { businessFontOptions, getBusinessFontVariables } from '../lib/businessStyle.js'
@@ -20,6 +20,7 @@ const sections = [
   { id: 'customers', label: 'Clientes', icon: Users },
   { id: 'stats', label: 'Estadísticas', icon: BarChart3 },
   { id: 'bonus-points', label: 'Puntos dobles', icon: Sparkles },
+  { id: 'custom-notifications', label: 'Notificaciones personalizadas', icon: Megaphone },
   { id: 'referrals', label: 'Invitar amigos', icon: UserPlus },
   { id: 'catalog-import', label: 'Importar catálogo', icon: FileSpreadsheet },
   { id: 'billing', label: 'Suscripción', icon: CreditCard },
@@ -42,6 +43,9 @@ const orderStatuses = [
   { id: 'cancelled', label: 'Cancelados' },
 ]
 
+const planLabels = { basic: 'Básico', vip: 'VIP', vip_plus: 'VIP PLUS' }
+const isVipPlan = (plan) => plan === 'vip' || plan === 'vip_plus'
+
 const emptyProduct = { name: '', description: '', category: '', price: '', pointsPerUnit: '0', imageDataUrl: '', imageScale: 1, imagePositionX: 50, imagePositionY: 50 }
 const emptyReward = { name: '', description: '', imageDataUrl: '', rewardType: 'product', discountType: 'fixed', discountScope: 'total', discountCategory: '', discountValue: '', pointsCost: '', availableDays: null }
 const openingDayLabels = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
@@ -49,6 +53,28 @@ const openingDayNames = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', '
 
 function createEmptyOpeningSchedule() {
   return openingDayLabels.map((day) => ({ day, isOpen: false, firstStart: '', firstEnd: '', hasSecondShift: false, secondStart: '', secondEnd: '' }))
+}
+
+async function sendCustomNotification(event) {
+  event.preventDefault()
+  const text = customNotificationDraft.trim()
+  if (!text || text.length > 200) {
+    setError('Escribí un mensaje de entre 1 y 200 caracteres.')
+    return
+  }
+  setIsSaving(true)
+  setError('')
+  try {
+    const result = await apiRequest('/partner/notifications/custom', { method: 'POST', token, body: { message: text } })
+    if (result.eligible === 0) {
+      flash('No hay clientes con pedidos y notificaciones push activas para este local.')
+    } else {
+      setCustomNotificationDraft('')
+      flash(result.failed
+        ? `Notificación entregada a ${result.sent} de ${result.eligible} dispositivos elegibles; algunos no la recibieron.`
+        : `Notificación enviada a ${result.sent} dispositivos de clientes elegibles.`)
+    }
+  } catch (sendError) { setError(sendError.message) } finally { setIsSaving(false) }
 }
 
 function parseOpeningSchedule(value) {
@@ -161,6 +187,7 @@ function PartnerDashboard({ token, user, onSignOut }) {
   const [rewards, setRewards] = useState([])
   const [orders, setOrders] = useState([])
   const [billing, setBilling] = useState(null)
+  const [customNotificationDraft, setCustomNotificationDraft] = useState('')
   const [shiftStartedAt, setShiftStartedAt] = useState(null)
   const [isHistoryOpen, setIsHistoryOpen] = useState(false)
   const [isStartingShift, setIsStartingShift] = useState(false)
@@ -766,12 +793,13 @@ function PartnerDashboard({ token, user, onSignOut }) {
             <button key={id} className={`${styles.navItem} ${section === id ? styles.navActive : ''}`} type="button" aria-current={section === id ? 'page' : undefined} onClick={() => { setSection(id); setIsMobileMenuOpen(false) }}>
               <Icon size={17} /><span className={styles.navLabel}>{label}</span>
               {(id === 'bonus-points' || id === 'catalog-import') && <span className={styles.navVip}>VIP</span>}
+              {id === 'custom-notifications' && <span className={styles.navVipPlus}>PLUS</span>}
               {id === 'orders' && boardOrders.filter((order) => order.status === 'in_process').length > 0 && <span className={styles.navCount}>{boardOrders.filter((order) => order.status === 'in_process').length}</span>}
             </button>
           ))}
         </nav>
         <div className={styles.sidebarBottom}>
-          <span className={styles.planPill}>{business.plan === 'vip' ? 'Plan VIP' : 'Plan Básico'}</span>
+          <span className={styles.planPill}>Plan {planLabels[business.plan] || 'Básico'}</span>
           <span className={styles.ownerName}>{user.firstName} {user.lastName}</span>
           <button className={styles.logoutButton} type="button" onClick={onSignOut}><LogOut size={16} /> Cerrar sesión</button>
         </div>
@@ -790,7 +818,7 @@ function PartnerDashboard({ token, user, onSignOut }) {
         {message && <p className={styles.toast} role="status">{message}</p>}
         {billingAlert && section !== 'billing' && <button type="button" className={styles.billingAlert} onClick={() => setSection('billing')}><AlertCircle size={16} /> {billingAlert} <strong>Ver suscripción</strong></button>}
 
-        {section === 'billing' && <BillingPanel token={token} billing={billing} setBilling={setBilling} isSuspended={isSuspended} onError={setError} />}
+        {section === 'billing' && <BillingPanel token={token} billing={billing} setBilling={setBilling} onPlanChange={(plan) => setBusiness((current) => ({ ...current, plan }))} isSuspended={isSuspended} onError={setError} />}
         {!isMobile && section === 'orders' && <>
           <div className={styles.ordersToolbar}>
             <button type="button" className={styles.shiftButton} disabled={isStartingShift} onClick={startNewShift}>{isStartingShift ? <LoaderCircle size={15} className={styles.spinner} /> : <RefreshCw size={15} />} Nueva jornada</button>
@@ -866,7 +894,7 @@ function PartnerDashboard({ token, user, onSignOut }) {
             <input className={styles.logoZoom} id="business-logo-scale" type="range" min="1" max="3" step="0.05" value={business.logoScale || 1} onChange={(event) => updateBusiness('logoScale', Number(event.target.value))} />
             <small className={styles.logoHelp}>Acercá la imagen para recortar los márgenes sobrantes.</small>
             {business.logoDataUrl && <button className={styles.textButton} type="button" onClick={() => updateBusiness('logoDataUrl', '')}>Quitar logo</button>}
-            <div className={styles.planSummary}><span>Plan asignado</span><strong>{business.plan === 'vip' ? 'VIP' : 'Básico'}</strong></div>
+            <div className={styles.planSummary}><span>Plan asignado</span><strong>{planLabels[business.plan] || 'Básico'}</strong></div>
           </section>
         </form>}
 
@@ -1059,8 +1087,8 @@ function PartnerDashboard({ token, user, onSignOut }) {
           </div>
         </section>}
 
-        {section === 'bonus-points' && <section className={`${styles.listSection} ${business.plan !== 'vip' ? styles.vipLocked : ''}`}>
-          {business.plan === 'vip' ? <>
+        {section === 'bonus-points' && <section className={`${styles.listSection} ${!isVipPlan(business.plan) ? styles.vipLocked : ''}`}>
+          {isVipPlan(business.plan) ? <>
             <div className={styles.sectionHeading}><h2>Puntos dobles por día</h2><p>Elegí cuándo tus clientes acumulan el doble de los puntos habituales. Se aplica a los pedidos confirmados en horario de Argentina.</p></div>
             <div className={styles.weekdayGrid}>{weekDays.map((day) => {
               const selected = (business.bonusPointsDays || []).includes(day.value)
@@ -1072,10 +1100,42 @@ function PartnerDashboard({ token, user, onSignOut }) {
             <div className={styles.bonusActions}><p>{business.bonusPointsActiveToday ? 'La promoción está activa hoy.' : 'La promoción no está activa hoy.'}</p><button className={styles.primaryButton} type="button" disabled={isSaving} onClick={saveBonusDays}>{isSaving ? 'Guardando...' : 'Guardar días'}</button></div>
           </> : <div className={styles.vipLock}>
             <span className={styles.vipLockIcon}><Sparkles size={23} /></span>
-            <span className={styles.planPill}>Exclusivo VIP</span>
+            <span className={styles.planPill}>Exclusivo VIP y VIP PLUS</span>
             <h2>Puntos dobles por día</h2>
             <p>Elegí días para que tus clientes acumulen el doble de puntos por cada pedido. La acumulación y los canjes habituales siguen disponibles en el Plan Básico.</p>
-            <button className={styles.lockedAction} type="button" disabled>Disponible con Plan VIP</button>
+            <button className={styles.lockedAction} type="button" disabled>Disponible con Plan VIP o VIP PLUS</button>
+          </div>}
+        </section>}
+        {section === 'custom-notifications' && <section className={`${styles.listSection} ${business.plan !== 'vip_plus' ? styles.vipLocked : ''}`}>
+          {business.plan === 'vip_plus' ? <form className={styles.customNotificationForm} onSubmit={sendCustomNotification}>
+            <div className={styles.sectionHeading}>
+              <h2>Promocioná tu local</h2>
+              <p>Al enviar, mandaremos una notificación push ahora a tus clientes elegibles. No se guarda ni se envía de nuevo automáticamente.</p>
+            </div>
+            <label className={styles.fieldLabel} htmlFor="custom-notification-message">Mensaje promocional</label>
+            <textarea
+              className={styles.textArea}
+              id="custom-notification-message"
+              maxLength={200}
+              rows={4}
+              value={customNotificationDraft}
+              onChange={(event) => setCustomNotificationDraft(event.target.value)}
+              placeholder="Contales a tus clientes qué hay de nuevo en tu local..."
+            />
+            <div className={styles.customNotificationActions}>
+              <small>{customNotificationDraft.length}/200 caracteres</small>
+              <button className={styles.primaryButton} type="submit" disabled={isSaving || !customNotificationDraft.trim()}>
+                {isSaving ? <LoaderCircle size={15} className={styles.spinner} /> : <Megaphone size={15} />}
+                {isSaving ? 'Enviando...' : 'Enviar notificación'}
+              </button>
+            </div>
+            <p className={styles.customNotificationHint}>Solo la recibirán clientes con al menos un pedido no cancelado en este local y que hayan habilitado las notificaciones push en su dispositivo.</p>
+          </form> : <div className={styles.vipLock}>
+            <span className={styles.vipLockIcon}><Megaphone size={23} /></span>
+            <span className={styles.planPill}>Exclusivo VIP PLUS</span>
+            <h2>Notificaciones personalizadas</h2>
+            <p>Enviá promociones breves a los clientes que ya realizaron pedidos en tu local.</p>
+            <button className={styles.lockedAction} type="button" disabled>Disponible con Plan VIP PLUS</button>
           </div>}
         </section>}
       </section>
@@ -1293,7 +1353,7 @@ function OpeningHoursEditor({ value, schedule, isMobile, onChange }) {
   </div>
 }
 
-function BillingPanel({ token, billing, setBilling, isSuspended, onError }) {
+function BillingPanel({ token, billing, setBilling, onPlanChange, isSuspended, onError }) {
   const [isPaying, setIsPaying] = useState(false)
   const [isChangingPlan, setIsChangingPlan] = useState(false)
   const [selectedPlan, setSelectedPlan] = useState('')
@@ -1321,6 +1381,7 @@ function BillingPanel({ token, billing, setBilling, isSuspended, onError }) {
     try {
       const result = await apiRequest('/partner/billing/plan', { method: 'PUT', token, body: { plan } })
       setBilling(result.billing)
+      onPlanChange(result.billing.plan)
       setSelectedPlan('')
     } catch (changeError) {
       onError(changeError.message)
@@ -1364,7 +1425,7 @@ function BillingPanel({ token, billing, setBilling, isSuspended, onError }) {
     <div className={styles.billingCard}>
       <h2>Pagos realizados</h2>
       {(billing.payments || []).length === 0 ? <p className={styles.billingHint}>Todavía no registramos pagos.</p> : <ul className={styles.billingPayments}>
-        {billing.payments.map((payment) => <li key={payment.id}><span>{formatLongDate(payment.paidAt)}<small>Plan {payment.plan === 'vip' ? 'VIP' : 'Básico'}{payment.periodEnd ? ` · cubre hasta el ${formatLongDate(payment.periodEnd)}` : ''}</small></span><strong>{currency.format(payment.amount)}</strong></li>)}
+        {billing.payments.map((payment) => <li key={payment.id}><span>{formatLongDate(payment.paidAt)}        <small>Plan {planLabels[payment.plan] || 'Básico'}{payment.periodEnd ? ` · cubre hasta el ${formatLongDate(payment.periodEnd)}` : ''}</small></span><strong>{currency.format(payment.amount)}</strong></li>)}
       </ul>}
     </div>
   </section>

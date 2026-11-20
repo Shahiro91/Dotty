@@ -10,7 +10,7 @@ export async function initializeDatabase() {
       id BIGSERIAL PRIMARY KEY,
       name VARCHAR(100) NOT NULL,
       slug VARCHAR(120) NOT NULL UNIQUE,
-      plan VARCHAR(20) NOT NULL DEFAULT 'basic' CHECK (plan IN ('basic', 'vip')),
+      plan VARCHAR(20) NOT NULL DEFAULT 'basic' CHECK (plan IN ('basic', 'vip', 'vip_plus')),
       description TEXT NOT NULL DEFAULT '',
       logo_data_url TEXT NOT NULL DEFAULT '',
       logo_scale REAL NOT NULL DEFAULT 1,
@@ -35,7 +35,11 @@ export async function initializeDatabase() {
     ALTER TABLE businesses ADD COLUMN IF NOT EXISTS addons_enabled BOOLEAN NOT NULL DEFAULT TRUE;
     ALTER TABLE businesses ADD COLUMN IF NOT EXISTS orders_shift_started_at TIMESTAMPTZ;
     ALTER TABLE businesses ADD COLUMN IF NOT EXISTS subscription_due_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '1 month');
-    ALTER TABLE businesses ADD COLUMN IF NOT EXISTS pending_plan VARCHAR(20) CHECK (pending_plan IN ('basic', 'vip'));
+    ALTER TABLE businesses ADD COLUMN IF NOT EXISTS pending_plan VARCHAR(20) CHECK (pending_plan IN ('basic', 'vip', 'vip_plus'));
+    ALTER TABLE businesses DROP CONSTRAINT IF EXISTS businesses_plan_check;
+    ALTER TABLE businesses ADD CONSTRAINT businesses_plan_check CHECK (plan IN ('basic', 'vip', 'vip_plus'));
+    ALTER TABLE businesses DROP CONSTRAINT IF EXISTS businesses_pending_plan_check;
+    ALTER TABLE businesses ADD CONSTRAINT businesses_pending_plan_check CHECK (pending_plan IN ('basic', 'vip', 'vip_plus'));
     UPDATE businesses SET plan = pending_plan, pending_plan = NULL WHERE pending_plan IS NOT NULL;
     ALTER TABLE businesses ALTER COLUMN opening_hours TYPE TEXT;
     CREATE TABLE IF NOT EXISTS business_videos (
@@ -250,7 +254,7 @@ export async function initializeDatabase() {
       phone VARCHAR(16) NOT NULL,
       email VARCHAR(254),
       business_name VARCHAR(100) NOT NULL,
-      requested_plan VARCHAR(20) NOT NULL DEFAULT 'basic' CHECK (requested_plan IN ('basic', 'vip')),
+      requested_plan VARCHAR(20) NOT NULL DEFAULT 'basic' CHECK (requested_plan IN ('basic', 'vip', 'vip_plus')),
       business_id BIGINT REFERENCES businesses(id),
       status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'contacted', 'approved', 'rejected')),
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -266,7 +270,9 @@ export async function initializeDatabase() {
       resolved BOOLEAN NOT NULL DEFAULT FALSE,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
-    ALTER TABLE local_applications ADD COLUMN IF NOT EXISTS requested_plan VARCHAR(20) NOT NULL DEFAULT 'basic' CHECK (requested_plan IN ('basic', 'vip'));
+    ALTER TABLE local_applications ADD COLUMN IF NOT EXISTS requested_plan VARCHAR(20) NOT NULL DEFAULT 'basic' CHECK (requested_plan IN ('basic', 'vip', 'vip_plus'));
+    ALTER TABLE local_applications DROP CONSTRAINT IF EXISTS local_applications_requested_plan_check;
+    ALTER TABLE local_applications ADD CONSTRAINT local_applications_requested_plan_check CHECK (requested_plan IN ('basic', 'vip', 'vip_plus'));
     ALTER TABLE local_applications ADD COLUMN IF NOT EXISTS email VARCHAR(254);
     ALTER TABLE local_applications ADD COLUMN IF NOT EXISTS business_id BIGINT REFERENCES businesses(id);
     ALTER TABLE local_applications ADD COLUMN IF NOT EXISTS activation_code_hash VARCHAR(64);

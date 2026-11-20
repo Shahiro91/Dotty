@@ -30,7 +30,7 @@ export function validSubscription(subscription) {
 }
 
 export async function notifyBusinessCustomers(businessId, message) {
-  if (!vapidPublicKey) return
+  if (!vapidPublicKey) return { eligible: 0, sent: 0, failed: 0 }
   const { rows } = await pool.query(
     `SELECT s.endpoint, s.p256dh, s.auth, b.name, b.slug
      FROM push_subscriptions s JOIN businesses b ON b.id = s.business_id
@@ -40,6 +40,8 @@ export async function notifyBusinessCustomers(businessId, message) {
      )`,
     [businessId],
   )
+  let sent = 0
+  let failed = 0
   for (let i = 0; i < rows.length; i += 20) {
     await Promise.all(rows.slice(i, i + 20).map(async (row) => {
       try {
@@ -48,7 +50,9 @@ export async function notifyBusinessCustomers(businessId, message) {
           JSON.stringify({ title: row.name, body: message, url: `/local/${encodeURIComponent(row.slug)}` }),
           { TTL: 86400, timeout: 10000 },
         )
+        sent += 1
       } catch (error) {
+        failed += 1
         if (error.statusCode === 404 || error.statusCode === 410) {
           await pool.query('DELETE FROM push_subscriptions WHERE endpoint = $1 AND p256dh = $2 AND auth = $3', [row.endpoint, row.p256dh, row.auth])
         } else {
@@ -57,4 +61,5 @@ export async function notifyBusinessCustomers(businessId, message) {
       }
     }))
   }
+  return { eligible: rows.length, sent, failed }
 }

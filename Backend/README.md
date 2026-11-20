@@ -66,7 +66,7 @@ Si usás un dominio propio, definí `FRONTEND_ORIGIN=https://tudominio.com`. Par
 
 ## Suscripción de los locales
 
-Plan Básico $15.000/mes y VIP $25.000/mes. Los locales nuevos tienen 30 días de prueba gratis desde su registro. El cambio de plan se aplica de inmediato y el siguiente pago usa el precio del plan elegido. Al vencer la prueba sin pago se suspende la cuenta; tras una suscripción pagada hay 5 días de gracia. La suspensión bloquea panel, tienda, pedidos y canjes sin borrar datos. Al pagar se reactiva.
+Plan Básico $15.000/mes, VIP $25.000/mes y VIP PLUS $35.000/mes. VIP PLUS incluye las funciones VIP y permite enviar notificaciones promocionales de hasta 200 caracteres a clientes con al menos un pedido no cancelado y notificaciones push habilitadas. Los locales nuevos tienen 30 días de prueba gratis desde su registro. El cambio de plan se aplica de inmediato y el siguiente pago usa el precio del plan elegido. Al vencer la prueba sin pago se suspende la cuenta; tras una suscripción pagada hay 5 días de gracia. La suspensión bloquea panel, tienda, pedidos y canjes sin borrar datos. Al pagar se reactiva.
 
 El cobro de suscripciones usa Checkout Pro de Mercado Pago. En desarrollo local, el backend arranca en modo sandbox y no acepta tokens de producción:
 

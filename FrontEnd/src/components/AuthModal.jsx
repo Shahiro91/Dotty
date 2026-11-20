@@ -91,8 +91,9 @@ function AuthModal({ user, businessSlug, initialMode = 'login', partnerOnly = fa
                 <input className={styles.passwordInput} id="account-email" type="email" autoComplete="email" maxLength={254} placeholder="nombre@local.com" value={email} onChange={(event) => setEmail(event.target.value.trimStart())} required />
                 <span className={styles.planLabel}>Plan solicitado</span>
                 <div className={styles.planOptions} role="group" aria-label="Plan solicitado">
-                  <button className={`${styles.planButton} ${requestedPlan === 'basic' ? styles.planSelected : ''}`} type="button" aria-pressed={requestedPlan === 'basic'} onClick={() => setRequestedPlan('basic')}>Básico</button>
-                  <button className={`${styles.planButton} ${requestedPlan === 'vip' ? styles.planSelected : ''}`} type="button" aria-pressed={requestedPlan === 'vip'} onClick={() => setRequestedPlan('vip')}>VIP</button>
+                  <button className={`${styles.planButton} ${requestedPlan === 'basic' ? styles.planSelected : ''}`} type="button" aria-pressed={requestedPlan === 'basic'} onClick={() => setRequestedPlan('basic')}>Básico<small>$15.000/mes</small></button>
+                  <button className={`${styles.planButton} ${requestedPlan === 'vip' ? styles.planSelected : ''}`} type="button" aria-pressed={requestedPlan === 'vip'} onClick={() => setRequestedPlan('vip')}>VIP<small>$25.000/mes</small></button>
+                  <button className={`${styles.planButton} ${requestedPlan === 'vip_plus' ? styles.planSelected : ''}`} type="button" aria-pressed={requestedPlan === 'vip_plus'} onClick={() => setRequestedPlan('vip_plus')}>VIP PLUS<small>$35.000/mes</small></button>
                 </div>
               </>}
               {!customerFlow && (mode === 'login' || mode === 'register') && <>

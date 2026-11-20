@@ -3,7 +3,7 @@ import { Ban, Check, ClipboardList, LoaderCircle, LogOut, Phone, Trash2 } from '
 import { apiRequest } from '../lib/api.js'
 import styles from './AdminDashboard.module.css'
 
-const planLabels = { basic: 'Básico', vip: 'VIP' }
+const planLabels = { basic: 'Básico', vip: 'VIP', vip_plus: 'VIP PLUS' }
 
 function AdminDashboard({ token, onSignOut }) {
   const [applications, setApplications] = useState([])
@@ -128,7 +128,7 @@ function AdminDashboard({ token, onSignOut }) {
                   <div className={styles.businessHeading}>
                     <h3>{application.businessName}</h3>
                     <span className={`${styles.status} ${styles[`status_${application.status}`]}`}>{application.claimed ? 'Activo' : 'Pendiente de ingreso'}</span>
-                    <span className={`${styles.plan} ${application.requestedPlan === 'vip' ? styles.planVip : styles.planBasic}`}>{planLabels[application.requestedPlan] || 'Básico'}</span>
+                    <span className={`${styles.plan} ${application.requestedPlan === 'basic' ? styles.planBasic : styles.planVip}`}>{planLabels[application.requestedPlan] || 'Básico'}</span>
                   </div>
                   <p>{application.firstName} {application.lastName}</p>
                   {application.email && <p>{application.email}</p>}

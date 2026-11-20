@@ -1,9 +1,13 @@
-export const PLAN_PRICES = { basic: 15000, vip: 25000 }
-export const PLAN_LABELS = { basic: 'Básico', vip: 'VIP' }
+export const PLAN_PRICES = { basic: 15000, vip: 25000, vip_plus: 35000 }
+export const PLAN_LABELS = { basic: 'Básico', vip: 'VIP', vip_plus: 'VIP PLUS' }
 export const BILLING_INITIAL_TRIAL_DAYS = 30
 export const BILLING_GRACE_DAYS = 5
 export const BILLING_PAY_WINDOW_DAYS = 10
 const DAY_MS = 24 * 60 * 60 * 1000
+
+export function isVipPlan(plan) {
+  return plan === 'vip' || plan === 'vip_plus'
+}
 
 export function describeBilling({ plan, subscriptionDueAt }, now = new Date(), graceDays = BILLING_GRACE_DAYS) {
   const dueAt = new Date(subscriptionDueAt)

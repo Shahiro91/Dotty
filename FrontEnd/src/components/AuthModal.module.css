@@ -14,8 +14,9 @@
 .applicationSuccess p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.55; text-align: center; }
 .applicationSuccess .submitButton { width: 100%; }
 .planLabel { margin-top: 5px; color: var(--ink); font-size: 12px; font-weight: 700; }
-.planOptions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.planButton { min-height: 44px; border: 1px solid #e5dbd2; border-radius: 5px; background: #fff; color: var(--ink); cursor: pointer; font: inherit; font-size: 12px; font-weight: 700; }
+.planOptions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.planButton { min-height: 52px; padding: 5px 2px; border: 1px solid #e5dbd2; border-radius: 5px; background: #fff; color: var(--ink); cursor: pointer; font: inherit; font-size: 11px; font-weight: 700; }
+.planButton small { display: block; margin-top: 3px; font-size: 9px; font-weight: 600; }
 .planButton:hover, .planSelected { border-color: var(--tomato); background: #faeee7; color: var(--tomato); }
 .inputWrap { height: 46px; padding: 0 12px; display: flex; align-items: center; gap: 9px; border: 1px solid #e5dbd2; border-radius: 5px; color: var(--muted); }
 .inputWrap:focus-within, .passwordInput:focus { outline: 2px solid #e3a98f; outline-offset: 1px; border-color: var(--tomato); }

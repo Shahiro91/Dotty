@@ -1,5 +1,5 @@
 import { pool } from '../database/pool.js'
-import { BILLING_GRACE_DAYS, describeBilling } from '../modules/billing/billing.rules.js'
+import { BILLING_GRACE_DAYS, describeBilling, isVipPlan } from '../modules/billing/billing.rules.js'
 
 export async function requireAdmin(req, res, next) {
   try {
@@ -55,8 +55,20 @@ export async function isBusinessSuspended(queryable, businessId) {
 export async function requireVip(req, res, next) {
   try {
     const { rows } = await pool.query('SELECT plan FROM businesses WHERE id = $1', [req.businessId])
-    if (rows[0]?.plan !== 'vip') {
-      return res.status(403).json({ error: 'La importación de catálogo está disponible con el Plan VIP.' })
+    if (!isVipPlan(rows[0]?.plan)) {
+      return res.status(403).json({ error: 'La importación de catálogo está disponible con los planes VIP y VIP PLUS.' })
+    }
+    next()
+  } catch (error) {
+    next(error)
+  }
+}
+
+export async function requireVipPlus(req, res, next) {
+  try {
+    const { rows } = await pool.query('SELECT plan FROM businesses WHERE id = $1', [req.businessId])
+    if (rows[0]?.plan !== 'vip_plus') {
+      return res.status(403).json({ error: 'Las notificaciones personalizadas están disponibles con el Plan VIP PLUS.' })
     }
     next()
   } catch (error) {

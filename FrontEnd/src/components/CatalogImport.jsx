@@ -58,7 +58,7 @@ function CatalogImport({ token, plan, onImported }) {
   }
 
   async function importCatalog() {
-    if (!preview || errors.length || !plan || plan !== 'vip') return
+    if (!preview || errors.length || !['vip', 'vip_plus'].includes(plan)) return
     setIsImporting(true)
     setMessage('')
     try {
@@ -76,13 +76,13 @@ function CatalogImport({ token, plan, onImported }) {
     }
   }
 
-  if (plan !== 'vip') return <section className={styles.locked}>
+  if (!['vip', 'vip_plus'].includes(plan)) return <section className={styles.locked}>
     <div className={styles.lockContent}>
       <span className={styles.lockIcon}><FileSpreadsheet size={23} /></span>
       <span className={styles.vip}>Exclusivo VIP</span>
       <h2>Importar catálogo</h2>
-      <p>Cargá categorías, productos y canjes desde un archivo Excel. Esta función está disponible con el Plan VIP.</p>
-      <button className={styles.lockedAction} type="button" disabled>Disponible con Plan VIP</button>
+      <p>Cargá categorías, productos y canjes desde un archivo Excel. Esta función está disponible con los planes VIP y VIP PLUS.</p>
+      <button className={styles.lockedAction} type="button" disabled>Disponible con Plan VIP o VIP PLUS</button>
     </div>
   </section>
 

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { describeBilling } from '../src/modules/billing/billing.rules.js'
+import { describeBilling, isVipPlan, PLAN_LABELS, PLAN_PRICES } from '../src/modules/billing/billing.rules.js'
 
 test('billing preserves due date, grace period and payment window boundaries', () => {
   const due = new Date('2026-03-20T12:00:00Z')
@@ -12,4 +12,13 @@ test('billing preserves due date, grace period and payment window boundaries', (
   assert.equal(describeBilling(business, new Date('2026-03-10T12:00:00Z')).canPay, true)
   assert.equal(describeBilling(business, new Date('2026-03-10T11:59:59.999Z')).canPay, false)
   assert.equal(describeBilling(business, due).price, 15000)
+})
+
+test('VIP PLUS has its monthly price and inherits VIP features', () => {
+  assert.equal(PLAN_PRICES.vip_plus, 35000)
+  assert.equal(PLAN_LABELS.vip_plus, 'VIP PLUS')
+  assert.equal(describeBilling({ plan: 'vip_plus', subscriptionDueAt: new Date('2026-03-20T12:00:00Z') }).price, 35000)
+  assert.equal(isVipPlan('vip_plus'), true)
+  assert.equal(isVipPlan('vip'), true)
+  assert.equal(isVipPlan('basic'), false)
 })

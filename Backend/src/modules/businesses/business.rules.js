@@ -1,3 +1,5 @@
+import { isVipPlan } from '../billing/billing.rules.js'
+
 function getBuenosAiresWeekday() {
   const weekday = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/Argentina/Buenos_Aires',
@@ -11,5 +13,5 @@ export function isAvailableToday(days) {
 }
 
 export function hasDoublePointsToday(plan, days) {
-  return plan === 'vip' && days.includes(getBuenosAiresWeekday())
+  return isVipPlan(plan) && days.includes(getBuenosAiresWeekday())
 }

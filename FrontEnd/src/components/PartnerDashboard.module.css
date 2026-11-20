@@ -19,6 +19,7 @@
 .navActive svg { color: #f27fa4; }
 .navLabel { min-width: 0; }
 .navVip { margin-left: auto; padding: 3px 5px; border-radius: 3px; background: #f4e4bd; color: #5f4c25; font-size: 8px; font-weight: 850; line-height: 1; }
+.navVipPlus { margin-left: auto; padding: 3px 5px; border-radius: 3px; background: #f0d8e6; color: #74375a; font-size: 8px; font-weight: 850; line-height: 1; }
 .navCount { min-width: 20px; height: 20px; margin-left: auto; display: grid; place-items: center; border-radius: 99px; background: #626567; color: #fff; font-size: 10px; font-weight: 800; }
 .sidebarBottom { margin-top: auto; padding: 17px 5px 0; display: grid; gap: 12px; border-top: 1px solid #5b5d5f; }
 .planPill { width: fit-content; padding: 5px 8px; border-radius: 4px; background: #f4e4bd; color: #5f4c25; font-size: 10px; font-weight: 800; }
@@ -249,6 +250,11 @@
 .vipLock h2 { margin: 14px 0 5px; color: #2d3932; font-family: var(--business-heading-font, var(--serif)); font-size: 20px; }
 .vipLock p { max-width: 360px; margin: 0; color: #777d75; font-size: 12px; line-height: 1.55; }
 .lockedAction { min-height: 36px; margin-top: 18px; padding: 0 12px; border: 1px solid #deded5; border-radius: 4px; background: #f4f3ed; color: #777d75; font: inherit; font-size: 11px; font-weight: 750; }
+.customNotificationForm { max-width: 680px; }
+.customNotificationActions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.customNotificationActions small, .customNotificationHint { color: #777d75; font-size: 10px; }
+.customNotificationActions .primaryButton { display: inline-flex; align-items: center; gap: 7px; }
+.customNotificationHint { margin: 12px 0 0; line-height: 1.5; }
 .textButton { min-height: 34px; padding: 0 8px; border: 0; background: transparent; color: #a34835; cursor: pointer; font: inherit; font-size: 10px; font-weight: 700; }
 .formActions { margin-top: 4px; display: flex; align-items: center; gap: 8px; }
 .imageCropStage { width: min(100%, 300px); max-width: 100%; box-sizing: border-box; aspect-ratio: 1; margin-top: 10px; position: relative; overflow: hidden; border: 1px solid #e1e1d9; border-radius: 5px; background: #292d29; cursor: grab; touch-action: none; user-select: none; }
