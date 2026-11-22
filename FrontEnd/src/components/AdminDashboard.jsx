@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Ban, Check, ClipboardList, LoaderCircle, LogOut, Phone, Trash2 } from 'lucide-react'
+import { Ban, Check, ClipboardList, LoaderCircle, LogOut, Phone, Search, Trash2 } from 'lucide-react'
 import { apiRequest } from '../lib/api.js'
 import styles from './AdminDashboard.module.css'
 
@@ -12,6 +12,22 @@ function AdminDashboard({ token, onSignOut }) {
   const [error, setError] = useState('')
   const [tab, setTab] = useState('businesses')
   const [messages, setMessages] = useState([])
+  const [searchQuery, setSearchQuery] = useState('')
+
+  const normalizedQuery = searchQuery.trim().toLocaleLowerCase('es')
+  const filteredApplications = applications.filter((application) => {
+    if (!normalizedQuery) return true
+    const searchable = [
+      application.businessName,
+      application.firstName,
+      application.lastName,
+      application.email,
+      application.phone,
+      planLabels[application.requestedPlan],
+      application.claimed ? 'Activo' : 'Pendiente de ingreso',
+    ].filter(Boolean).join(' ').toLocaleLowerCase('es')
+    return searchable.includes(normalizedQuery)
+  })
 
   useEffect(() => {
     apiRequest('/admin/support', { token }).then((result) => setMessages(result.messages)).catch(() => {})
@@ -121,8 +137,22 @@ function AdminDashboard({ token, onSignOut }) {
         ) : applications.length === 0 ? (
           <p className={styles.empty}>Todavía no hay locales activos.</p>
         ) : (
-          <div className={styles.list}>
-            {applications.map((application) => (
+          <>
+            <div className={styles.searchBar}>
+              <Search size={17} aria-hidden="true" />
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Buscar por local, nombre, email o teléfono"
+                aria-label="Buscar locales"
+              />
+              {searchQuery && <button type="button" onClick={() => setSearchQuery('')} aria-label="Limpiar búsqueda">Limpiar</button>}
+            </div>
+            {filteredApplications.length === 0 ? (
+              <p className={styles.empty}>No encontramos locales para "{searchQuery.trim()}".</p>
+            ) : <div className={styles.list}>
+            {filteredApplications.map((application) => (
               <article className={styles.application} key={application.id}>
                 <div className={styles.business}>
                   <div className={styles.businessHeading}>
@@ -152,7 +182,8 @@ function AdminDashboard({ token, onSignOut }) {
                 )}
               </article>
             ))}
-          </div>
+            </div>}
+          </>
         )}
         <p className={styles.note}>Los locales nuevos se activan al registrarse y tienen 30 días gratis.</p>
       </section>
