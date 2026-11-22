@@ -29,7 +29,7 @@
 .primary { border: 0; background: var(--store-primary, #c95031); color: white; }
 .secondary { width: fit-content; border: 1px dashed #b9bdb3; background: white; color: #4e5850; }
 .primary:disabled, .secondary:disabled { opacity: .55; cursor: not-allowed; }
-.link { min-height: 34px; padding: 0 8px; border: 0; background: transparent; color: #a34835; cursor: pointer; font: inherit; font-size: 11px; font-weight: 700; }
+.link { min-height: 34px; padding: 0 8px; border: 0; background: transparent; color: var(--store-primary, #c95031); cursor: pointer; font: inherit; font-size: 11px; font-weight: 700; }
 .iconButton { width: 32px; height: 32px; padding: 0; display: grid; place-items: center; border: 1px solid #e0e1d9; border-radius: 4px; background: white; color: #4e5850; cursor: pointer; }
 .iconButton:disabled { opacity: .55; cursor: wait; }
 .switchRow { display: inline-flex; align-items: center; gap: 9px; flex: none; cursor: pointer; font-size: 11px; font-weight: 800; color: #4b524d; }

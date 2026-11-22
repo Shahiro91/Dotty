@@ -45,6 +45,9 @@
 .searchBar input { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; color: var(--ink); font: inherit; font-size: 13px; }
 .searchBar input::placeholder { color: #9b988f; }
 .searchBar button { border: 0; background: transparent; color: var(--tomato); cursor: pointer; font: inherit; font-size: 11px; font-weight: 800; }
+.searchBar .refreshButton { width: 32px; min-width: 32px; height: 32px; margin-left: 0; padding: 0; border: 1px solid var(--line); border-radius: 5px; background: white; color: var(--ink); }
+.searchBar .refreshButton:hover { border-color: #e7c7b3; color: var(--tomato); }
+.searchBar .refreshButton:disabled { opacity: .55; cursor: wait; }
 .actions button:disabled { opacity: .55; cursor: wait; }
 .loading, .empty { min-height: 180px; display: flex; align-items: center; justify-content: center; gap: 9px; color: var(--muted); font-size: 13px; }
 .error { margin: 12px 22px 0; color: #a83224; font-size: 12px; }

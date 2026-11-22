@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Ban, Check, ClipboardList, LoaderCircle, LogOut, Phone, Search, Trash2 } from 'lucide-react'
+import { Ban, Check, ClipboardList, LoaderCircle, LogOut, Phone, RefreshCw, Search, Trash2 } from 'lucide-react'
 import { apiRequest } from '../lib/api.js'
 import styles from './AdminDashboard.module.css'
 
@@ -13,6 +13,7 @@ function AdminDashboard({ token, onSignOut }) {
   const [tab, setTab] = useState('businesses')
   const [messages, setMessages] = useState([])
   const [searchQuery, setSearchQuery] = useState('')
+  const [refreshKey, setRefreshKey] = useState(0)
 
   const normalizedQuery = searchQuery.trim().toLocaleLowerCase('es')
   const filteredApplications = applications.filter((application) => {
@@ -23,7 +24,7 @@ function AdminDashboard({ token, onSignOut }) {
       application.lastName,
       application.email,
       application.phone,
-      planLabels[application.requestedPlan],
+      planLabels[application.currentPlan],
       application.claimed ? 'Activo' : 'Pendiente de ingreso',
     ].filter(Boolean).join(' ').toLocaleLowerCase('es')
     return searchable.includes(normalizedQuery)
@@ -63,7 +64,7 @@ function AdminDashboard({ token, onSignOut }) {
         if (isCurrent) setIsLoading(false)
       })
     return () => { isCurrent = false }
-  }, [token])
+  }, [token, refreshKey])
 
   async function updateSubscription(application, action) {
     if (action === 'suspend' && !window.confirm(`¿Suspender ahora a ${application.businessName}? No podrán usar la cuenta hasta que paguen o la extiendas.`)) return
@@ -147,6 +148,16 @@ function AdminDashboard({ token, onSignOut }) {
                 placeholder="Buscar por local, nombre, email o teléfono"
                 aria-label="Buscar locales"
               />
+              <button
+                type="button"
+                className={styles.refreshButton}
+                aria-label="Actualizar locales"
+                title="Actualizar locales"
+                disabled={isLoading}
+                onClick={() => setRefreshKey((current) => current + 1)}
+              >
+                <RefreshCw size={15} />
+              </button>
               {searchQuery && <button type="button" onClick={() => setSearchQuery('')} aria-label="Limpiar búsqueda">Limpiar</button>}
             </div>
             {filteredApplications.length === 0 ? (
@@ -158,7 +169,7 @@ function AdminDashboard({ token, onSignOut }) {
                   <div className={styles.businessHeading}>
                     <h3>{application.businessName}</h3>
                     <span className={`${styles.status} ${styles[`status_${application.status}`]}`}>{application.claimed ? 'Activo' : 'Pendiente de ingreso'}</span>
-                    <span className={`${styles.plan} ${application.requestedPlan === 'basic' ? styles.planBasic : styles.planVip}`}>{planLabels[application.requestedPlan] || 'Básico'}</span>
+                    <span className={`${styles.plan} ${application.currentPlan === 'basic' ? styles.planBasic : styles.planVip}`}>{planLabels[application.currentPlan] || 'Básico'}</span>
                   </div>
                   <p>{application.firstName} {application.lastName}</p>
                   {application.email && <p>{application.email}</p>}

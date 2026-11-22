@@ -6,6 +6,7 @@ export async function getApplications(status) {
   const rows = await listApplications(status)
   return rows.map(({ businessPlan, subscriptionDueAt, ...application }) => ({
     ...application,
+    currentPlan: businessPlan || application.requestedPlan,
     billing: subscriptionDueAt ? describeBilling({ plan: businessPlan, subscriptionDueAt }) : null,
   }))
 }
