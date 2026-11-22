@@ -45,6 +45,7 @@ const orderStatuses = [
 
 const planLabels = { basic: 'Básico', vip: 'VIP', vip_plus: 'VIP PLUS' }
 const isVipPlan = (plan) => plan === 'vip' || plan === 'vip_plus'
+const isValidHexColor = (value) => /^#[0-9a-fA-F]{6}$/.test(value)
 
 const emptyProduct = { name: '', description: '', category: '', price: '', pointsPerUnit: '0', imageDataUrl: '', imageScale: 1, imagePositionX: 50, imagePositionY: 50 }
 const emptyReward = { name: '', description: '', imageDataUrl: '', rewardType: 'product', discountType: 'fixed', discountScope: 'total', discountCategory: '', discountValue: '', pointsCost: '', availableDays: null }
@@ -53,28 +54,6 @@ const openingDayNames = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', '
 
 function createEmptyOpeningSchedule() {
   return openingDayLabels.map((day) => ({ day, isOpen: false, firstStart: '', firstEnd: '', hasSecondShift: false, secondStart: '', secondEnd: '' }))
-}
-
-async function sendCustomNotification(event) {
-  event.preventDefault()
-  const text = customNotificationDraft.trim()
-  if (!text || text.length > 200) {
-    setError('Escribí un mensaje de entre 1 y 200 caracteres.')
-    return
-  }
-  setIsSaving(true)
-  setError('')
-  try {
-    const result = await apiRequest('/partner/notifications/custom', { method: 'POST', token, body: { message: text } })
-    if (result.eligible === 0) {
-      flash('No hay clientes con pedidos y notificaciones push activas para este local.')
-    } else {
-      setCustomNotificationDraft('')
-      flash(result.failed
-        ? `Notificación entregada a ${result.sent} de ${result.eligible} dispositivos elegibles; algunos no la recibieron.`
-        : `Notificación enviada a ${result.sent} dispositivos de clientes elegibles.`)
-    }
-  } catch (sendError) { setError(sendError.message) } finally { setIsSaving(false) }
 }
 
 function parseOpeningSchedule(value) {
@@ -180,6 +159,7 @@ function PartnerDashboard({ token, user, onSignOut }) {
     return isMobileViewport ? 'store' : 'orders'
   })
   const [business, setBusiness] = useState(null)
+  const [colorDrafts, setColorDrafts] = useState({ primaryColor: '', secondaryColor: '' })
   const [openingHoursSchedule, setOpeningHoursSchedule] = useState(null)
   const [categories, setCategories] = useState([])
   const [categoryAddons, setCategoryAddons] = useState([])
@@ -245,6 +225,10 @@ function PartnerDashboard({ token, user, onSignOut }) {
       .then(async (overviewResult) => {
         if (!isCurrent) return
         setBusiness(overviewResult.business)
+        setColorDrafts({
+          primaryColor: overviewResult.business.primaryColor || '#c95031',
+          secondaryColor: overviewResult.business.secondaryColor || '#58705e',
+        })
         setOpeningHoursSchedule(parseOpeningSchedule(overviewResult.business.openingHours))
         setBilling(overviewResult.billing)
         if (overviewResult.billing.status === 'suspended' || overviewResult.billing.requiresInitialPayment) {
@@ -360,6 +344,28 @@ function PartnerDashboard({ token, user, onSignOut }) {
     window.setTimeout(() => setMessage(''), 2800)
   }
 
+  async function sendCustomNotification(event) {
+    event.preventDefault()
+    const text = customNotificationDraft.trim()
+    if (!text || text.length > 200) {
+      setError('Escribí un mensaje de entre 1 y 200 caracteres.')
+      return
+    }
+    setIsSaving(true)
+    setError('')
+    try {
+      const result = await apiRequest('/partner/notifications/custom', { method: 'POST', token, body: { message: text } })
+      if (result.eligible === 0) {
+        flash('No hay clientes con pedidos y notificaciones push activas para este local.')
+      } else {
+        setCustomNotificationDraft('')
+        flash(result.failed
+          ? `Notificación enviada a ${result.sent} de ${result.eligible} dispositivos elegibles; no se pudo enviar al resto.`
+          : `Notificación enviada a ${result.sent} dispositivos de clientes elegibles.`)
+      }
+    } catch (sendError) { setError(sendError.message) } finally { setIsSaving(false) }
+  }
+
   const safeCropRatio = cropImageRatio || 1
   const cropStageWidth = Math.min(300, 300 * safeCropRatio)
   const cropWindowWidth = Math.min(1, 1 / safeCropRatio)
@@ -368,6 +374,10 @@ function PartnerDashboard({ token, user, onSignOut }) {
   const cropShiftY = (50 - (productDraft.imagePositionY ?? 50)) * productDraft.imageScale * (1 - cropWindowHeight)
   async function saveBusiness(event) {
     event.preventDefault()
+    if (!isValidHexColor(colorDrafts.primaryColor) || !isValidHexColor(colorDrafts.secondaryColor)) {
+      setError('Ingresá colores hexadecimales válidos, por ejemplo #C95031.')
+      return
+    }
     if (!business.bannerDataUrl) {
       setError('Completá los campos obligatorios: falta cargar el banner de la página.')
       return
@@ -401,6 +411,7 @@ function PartnerDashboard({ token, user, onSignOut }) {
         },
       })
       setBusiness((current) => ({ ...result.business, promoVideos: current.promoVideos || [] }))
+      setColorDrafts({ primaryColor: result.business.primaryColor, secondaryColor: result.business.secondaryColor })
       setOpeningHoursSchedule(parseOpeningSchedule(result.business.openingHours))
       flash('Perfil del local actualizado.')
     } catch (saveError) { setError(saveError.message) } finally { setIsSaving(false) }
@@ -717,6 +728,11 @@ function PartnerDashboard({ token, user, onSignOut }) {
     setBusiness((current) => ({ ...current, [field]: value }))
   }
 
+  function updateColor(field, value) {
+    setColorDrafts((current) => ({ ...current, [field]: value }))
+    if (isValidHexColor(value)) updateBusiness(field, value)
+  }
+
   async function toggleBusinessOption(field, value) {
     setIsSaving(true)
     setError('')
@@ -869,13 +885,19 @@ function PartnerDashboard({ token, user, onSignOut }) {
             <div className={styles.colorFields}>
               <div className={styles.colorField}>
                 <label className={styles.fieldLabel} htmlFor="business-primary-color">Color primario</label>
-                <div className={styles.colorControl}><input id="business-primary-color" type="color" value={business.primaryColor || '#c95031'} onChange={(event) => updateBusiness('primaryColor', event.target.value)} /><code>{business.primaryColor || '#c95031'}</code></div>
-                <small>Títulos y botones principales</small>
+                <div className={styles.colorControl}>
+                  <input type="color" aria-label="Elegir color primario" value={business.primaryColor || '#c95031'} onChange={(event) => updateColor('primaryColor', event.target.value)} />
+                  <input id="business-primary-color" type="text" value={colorDrafts.primaryColor} onChange={(event) => updateColor('primaryColor', event.target.value)} maxLength={7} pattern="#[0-9a-fA-F]{6}" title="Ingresá un color hexadecimal de 6 dígitos, por ejemplo #C95031." aria-describedby="primary-color-hint" aria-invalid={!isValidHexColor(colorDrafts.primaryColor)} spellCheck={false} required />
+                </div>
+                <small id="primary-color-hint">{isValidHexColor(colorDrafts.primaryColor) ? 'Títulos y botones principales. Formato: #C95031.' : 'Ingresá # seguido de 6 dígitos hexadecimales.'}</small>
               </div>
               <div className={styles.colorField}>
                 <label className={styles.fieldLabel} htmlFor="business-secondary-color">Color secundario</label>
-                <div className={styles.colorControl}><input id="business-secondary-color" type="color" value={business.secondaryColor || '#58705e'} onChange={(event) => updateBusiness('secondaryColor', event.target.value)} /><code>{business.secondaryColor || '#58705e'}</code></div>
-                <small>Puntos, etiquetas y acentos</small>
+                <div className={styles.colorControl}>
+                  <input type="color" aria-label="Elegir color secundario" value={business.secondaryColor || '#58705e'} onChange={(event) => updateColor('secondaryColor', event.target.value)} />
+                  <input id="business-secondary-color" type="text" value={colorDrafts.secondaryColor} onChange={(event) => updateColor('secondaryColor', event.target.value)} maxLength={7} pattern="#[0-9a-fA-F]{6}" title="Ingresá un color hexadecimal de 6 dígitos, por ejemplo #58705E." aria-describedby="secondary-color-hint" aria-invalid={!isValidHexColor(colorDrafts.secondaryColor)} spellCheck={false} required />
+                </div>
+                <small id="secondary-color-hint">{isValidHexColor(colorDrafts.secondaryColor) ? 'Puntos, etiquetas y acentos. Formato: #58705E.' : 'Ingresá # seguido de 6 dígitos hexadecimales.'}</small>
               </div>
             </div>
 

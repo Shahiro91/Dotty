@@ -219,8 +219,11 @@
 .colorField { min-width: 0; }
 .colorField .fieldLabel { margin-top: 0; }
 .colorControl { min-height: 39px; padding: 4px 8px; display: flex; align-items: center; gap: 9px; border: 1px solid #d9dcd4; border-radius: 4px; background: white; }
-.colorControl input { width: 32px; height: 28px; padding: 0; overflow: hidden; border: 0; border-radius: 3px; background: transparent; cursor: pointer; }
-.colorControl code { color: #515950; font: inherit; font-size: 11px; text-transform: uppercase; }
+.colorControl input[type="color"] { width: 32px; height: 28px; flex: 0 0 auto; padding: 0; overflow: hidden; border: 0; border-radius: 3px; background: transparent; cursor: pointer; }
+.colorControl input[type="text"] { width: 100%; min-width: 0; padding: 5px 0; border: 0; background: transparent; color: #515950; font: inherit; font-size: 11px; text-transform: uppercase; }
+.colorControl:focus-within { border-color: var(--store-primary, #c95031); box-shadow: 0 0 0 2px color-mix(in srgb, var(--store-primary, #c95031) 16%, transparent); }
+.colorControl input[type="text"]:focus { outline: 0; }
+.colorControl:has(input[aria-invalid="true"]) { border-color: #a13c2a; }
 .colorField > small { margin-top: 5px; display: block; color: #777d75; font-size: 9px; line-height: 1.4; }
 .logoZoomLabel { margin-top: 12px; display: flex; justify-content: space-between; color: #4b524d; font-size: 11px; font-weight: 750; }
 .logoZoomLabel output { color: #777d75; font-variant-numeric: tabular-nums; }
