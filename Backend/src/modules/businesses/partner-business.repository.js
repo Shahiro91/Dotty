@@ -1,4 +1,5 @@
 import { pool } from '../../database/pool.js'
+import { businessSlug } from './business.rules.js'
 
 export async function getOverview(businessId) {
   const { rows } = await pool.query(
@@ -62,33 +63,67 @@ export async function assignReferralCode(customerId, code) {
 export async function updateBusiness(businessId, input) {
   const { name, description, address, openingHours, whatsapp, logoDataUrl, bannerDataUrl, primaryColor, secondaryColor, logoScale, fontFamily, deliveryEnabled, addonsEnabled } = input
   const phone = whatsapp.replace(/[\s()-]/g, '')
-  if (/^\+?[0-9]{8,15}$/.test(phone)) {
-    const taken = await pool.query(
-      "SELECT 1 FROM customers WHERE phone = $1 AND NOT (business_id = $2 AND role = 'local_owner')",
-      [phone, businessId],
-    )
-    if (taken.rows.length) {
-      const error = new Error('Ese celular ya pertenece a otra cuenta.')
-      error.status = 409
-      throw error
+  const client = await pool.connect()
+  let transactionStarted = false
+  try {
+    await client.query('BEGIN')
+    transactionStarted = true
+    const { rows: current } = await client.query('SELECT name, slug FROM businesses WHERE id = $1 FOR UPDATE', [businessId])
+    if (!current[0]) {
+      await client.query('ROLLBACK')
+      transactionStarted = false
+      return null
     }
-    await pool.query("UPDATE customers SET phone = $1 WHERE business_id = $2 AND role = 'local_owner'", [phone, businessId])
-    await pool.query('UPDATE local_applications SET phone = $1 WHERE business_id = $2', [phone, businessId])
+    if (/^\+?[0-9]{8,15}$/.test(phone)) {
+      const taken = await client.query(
+        "SELECT 1 FROM customers WHERE phone = $1 AND NOT (business_id = $2 AND role = 'local_owner')",
+        [phone, businessId],
+      )
+      if (taken.rows.length) {
+        const error = new Error('Ese celular ya pertenece a otra cuenta.')
+        error.status = 409
+        throw error
+      }
+      await client.query("UPDATE customers SET phone = $1 WHERE business_id = $2 AND role = 'local_owner'", [phone, businessId])
+      await client.query('UPDATE local_applications SET phone = $1 WHERE business_id = $2', [phone, businessId])
+    }
+    let updated
+    for (let attempt = 1; attempt <= 100; attempt += 1) {
+      const suffix = `-${businessId}${attempt > 1 ? `-${attempt}` : ''}`
+      const slug = name === current[0].name ? current[0].slug : businessSlug(name, suffix)
+      await client.query('SAVEPOINT business_slug')
+      try {
+        const { rows } = await client.query(
+          `UPDATE businesses SET name = $1, description = $2, address = $3,
+             opening_hours = $4, whatsapp = $5, logo_data_url = $6,
+             banner_data_url = $7, primary_color = $8, secondary_color = $9,
+             logo_scale = $10, font_family = $11, delivery_enabled = $12, addons_enabled = $13, slug = $14
+           WHERE id = $15
+           RETURNING id, name, slug, plan, description, logo_data_url AS "logoDataUrl",
+                     logo_scale AS "logoScale", font_family AS "fontFamily",
+                     banner_data_url AS "bannerDataUrl", primary_color AS "primaryColor",
+                     secondary_color AS "secondaryColor", address, opening_hours AS "openingHours", whatsapp,
+                     delivery_enabled AS "deliveryEnabled", addons_enabled AS "addonsEnabled"`,
+          [name, description, address, openingHours, whatsapp, logoDataUrl, bannerDataUrl, primaryColor, secondaryColor, logoScale, fontFamily, deliveryEnabled, addonsEnabled, slug, businessId],
+        )
+        updated = rows[0]
+        await client.query('RELEASE SAVEPOINT business_slug')
+        break
+      } catch (error) {
+        if (error.code !== '23505' || error.constraint !== 'businesses_slug_key' || name === current[0].name || attempt === 100) throw error
+        await client.query('ROLLBACK TO SAVEPOINT business_slug')
+        await client.query('RELEASE SAVEPOINT business_slug')
+      }
+    }
+    await client.query('COMMIT')
+    transactionStarted = false
+    return updated
+  } catch (error) {
+    if (transactionStarted) await client.query('ROLLBACK')
+    throw error
+  } finally {
+    client.release()
   }
-  const { rows } = await pool.query(
-    `UPDATE businesses SET name = $1, description = $2, address = $3,
-       opening_hours = $4, whatsapp = $5, logo_data_url = $6,
-       banner_data_url = $7, primary_color = $8, secondary_color = $9,
-       logo_scale = $10, font_family = $11, delivery_enabled = $12, addons_enabled = $13
-     WHERE id = $14
-     RETURNING id, name, slug, plan, description, logo_data_url AS "logoDataUrl",
-               logo_scale AS "logoScale", font_family AS "fontFamily",
-               banner_data_url AS "bannerDataUrl", primary_color AS "primaryColor",
-               secondary_color AS "secondaryColor", address, opening_hours AS "openingHours", whatsapp,
-               delivery_enabled AS "deliveryEnabled", addons_enabled AS "addonsEnabled"`,
-    [name, description, address, openingHours, whatsapp, logoDataUrl, bannerDataUrl, primaryColor, secondaryColor, logoScale, fontFamily, deliveryEnabled, addonsEnabled, businessId],
-  )
-  return rows[0]
 }
 
 export async function updateOption(businessId, field, column, value) {

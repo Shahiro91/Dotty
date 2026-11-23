@@ -110,6 +110,7 @@ export async function initializeDatabase() {
       UNIQUE (business_id, name)
     );
     ALTER TABLE business_categories ADD COLUMN IF NOT EXISTS fractional_parts SMALLINT NOT NULL DEFAULT 0;
+    ALTER TABLE business_categories ADD COLUMN IF NOT EXISTS sort_order INTEGER;
     CREATE TABLE IF NOT EXISTS business_category_addons (
       id BIGSERIAL PRIMARY KEY,
       business_id BIGINT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,

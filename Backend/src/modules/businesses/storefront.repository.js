@@ -57,7 +57,7 @@ export async function loadStorefrontCatalog(businessId) {
       [businessId],
     ),
     pool.query('SELECT id, original_name AS name, size_bytes AS "sizeBytes" FROM business_videos WHERE business_id = $1 ORDER BY created_at, id', [businessId]),
-    pool.query('SELECT name, fractional_parts AS "fractionalParts" FROM business_categories WHERE business_id = $1 ORDER BY name', [businessId]),
+    pool.query('SELECT name, fractional_parts AS "fractionalParts" FROM business_categories WHERE business_id = $1 ORDER BY sort_order ASC NULLS LAST, name', [businessId]),
   ])
   return { products: products.rows, rewards: rewards.rows, addons: addons.rows, categories: categories.rows, promoVideos: promoVideos.rows, bestSellerIds: bestSellers.rows.map((row) => row.id) }
 }

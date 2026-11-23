@@ -1,5 +1,12 @@
 import { isVipPlan } from '../billing/billing.rules.js'
 
+export function businessSlug(name, suffix) {
+  const base = name.normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'local'
+  return `${base.slice(0, 120 - suffix.length)}${suffix}`
+}
+
 function getBuenosAiresWeekday() {
   const weekday = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/Argentina/Buenos_Aires',

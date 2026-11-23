@@ -213,7 +213,11 @@ function LocalStorefront({ slug, session, onAuthenticate, onSignOut, isPreview =
   const rewards = storeData?.rewards || []
   const bestSellerIds = new Set(storeData?.bestSellerIds || [])
   const bestSellers = products.filter((product) => bestSellerIds.has(product.id))
-  const categoryNames = [...new Set(products.map((product) => product.category))]
+  const productCategoryNames = new Set(products.map((product) => product.category))
+  const categoryNames = [
+    ...categories.map((category) => category.name).filter((name) => productCategoryNames.delete(name)),
+    ...productCategoryNames,
+  ]
   const deliveryEnabled = business?.deliveryEnabled !== false
   const addonsEnabled = business?.addonsEnabled !== false
   const currentTab = categoryNames.includes(activeCategory) ? activeCategory : categoryNames[0]

@@ -25,3 +25,10 @@ export function readDeleteCategory(body) {
   const name = typeof body?.name === 'string' ? body.name.trim() : ''
   return validName(name) ? name : null
 }
+
+export function readCategoryOrder(body) {
+  const names = body?.categories
+  if (!Array.isArray(names) || names.some((name) => typeof name !== 'string' || name !== name.trim() || !validName(name))
+    || new Set(names).size !== names.length) return null
+  return names
+}

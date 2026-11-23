@@ -20,6 +20,10 @@ En cada pedido de un local se solicita el nombre, el apellido opcional y los dat
 
 Las categorías se guardan por local y pueden existir antes de cargar productos; al iniciar, las categorías de productos existentes se migran automáticamente. Cada local tiene una página pública en `/local/<slug>`. Sus pedidos quedan en `customer_orders` con el `business_id` correspondiente. Los puntos se calculan con `points_per_unit` de cada producto. Cancelar un pedido revierte esos puntos una sola vez; cancelar un canje devuelve el costo descontado. El menú del sitio raíz conserva el cálculo heredado de 1 punto por cada $1.000.
 
+Al guardar un cambio de nombre del local se genera un nuevo enlace único para su tienda. El enlace anterior y los códigos QR que lo contienen dejan de apuntar al local; el dueño debe compartir el enlace actualizado. Guardar otros cambios sin modificar el nombre conserva el enlace. Administración muestra el nombre actual de los locales vinculados y conserva el nombre original en las solicitudes sin local.
+
+En Productos se pueden arrastrar las categorías o usar las flechas para definir su orden en el menú público. Sin un orden manual se muestran por nombre; las categorías nuevas se agregan después de las ya ordenadas. `PUT /api/partner/categories/order` recibe la lista completa de nombres y devuelve un error si las categorías cambiaron desde la última consulta.
+
 Los logos y fotos se optimizan en el navegador y se guardan como imágenes WebP en PostgreSQL. Es práctico para comenzar; si el volumen de imágenes crece, conviene migrarlas a almacenamiento de objetos persistente.
 
 `POST /api/local-applications` crea la cuenta con contraseña y el local en una transacción, lo activa inmediatamente y devuelve la sesión del dueño. Se guarda el registro como `approved` en `local_applications` y comienza una prueba gratuita de 30 días. El formulario solicita plan `basic` o `vip`; no se requiere aprobación ni código. El celular y el email no pueden estar asociados a otra cuenta.
@@ -28,7 +32,7 @@ El administrador usa solo el email `mariaquintana520@gmail.com` y la contraseña
 
 Las solicitudes anteriores pendientes, contactadas o aprobadas sin activar se activan al ingresar con las credenciales de la cuenta asociada; su prueba comienza entonces. Las solicitudes rechazadas no se activan. Los locales ya activos conservan su vencimiento al ingresar.
 
-Para ejecutar las pruebas, configurá `TEST_DATABASE_URL` con una base PostgreSQL de pruebas y ejecutá `node --test test/phone-order.test.js test/billing-rules.test.js test/order-schema.test.js test/order-items.test.js test/push-notifications.test.js test/push-integration.test.js` desde `Backend`. Las pruebas de integración crean y eliminan esquemas aislados. Mercado Pago y los envíos push se simulan: no se realizan pagos ni llamadas reales a estos servicios.
+Para ejecutar las pruebas, configurá `TEST_DATABASE_URL` con una base PostgreSQL de pruebas y ejecutá `node --test test/phone-order.test.js test/category-order.test.js test/business-slug.test.js test/billing-rules.test.js test/order-schema.test.js test/order-items.test.js test/push-notifications.test.js test/push-integration.test.js` desde `Backend`. Las pruebas de integración crean y eliminan esquemas aislados. Mercado Pago y los envíos push se simulan: no se realizan pagos ni llamadas reales a estos servicios.
 
 La integración comprueba que los métodos y rutas de API incluidos en `test/fixtures/api-coverage.js` reciben al menos una respuesta exitosa; además verifica respuestas y errores en distintos flujos. El inventario debe actualizarse cuando cambien los endpoints. Esta comprobación no cubre todos los escenarios ni reemplaza una prueba con el sandbox real de Mercado Pago. Sin `TEST_DATABASE_URL`, la integración se omite.
 

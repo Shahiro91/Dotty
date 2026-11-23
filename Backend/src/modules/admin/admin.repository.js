@@ -7,7 +7,7 @@ export async function listApplications(status) {
     : 'WHERE ($1::text IS NULL OR la.status = $1)'
   const { rows } = await pool.query(
     `SELECT la.id, la.first_name AS "firstName", la.last_name AS "lastName", la.phone, la.email,
-            business_name AS "businessName", requested_plan AS "requestedPlan",
+            COALESCE(b.name, la.business_name) AS "businessName", requested_plan AS "requestedPlan",
             la.status, la.created_at AS "createdAt", la.business_id AS "businessId",
             (la.claimed_at IS NOT NULL) AS claimed,
             b.plan AS "businessPlan", b.subscription_due_at AS "subscriptionDueAt"

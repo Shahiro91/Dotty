@@ -79,7 +79,9 @@ router.patch('/partner/business', authenticate, requirePartner, async (req, res,
   const input = readBusinessInput(req.body)
   if (!input) return res.status(400).json({ error: 'Revisá el perfil, cargá un banner válido y verificá sus opciones visuales.' })
   try {
-    res.json({ business: await updateBusiness(req.businessId, input) })
+    const business = await updateBusiness(req.businessId, input)
+    if (!business) return res.status(404).json({ error: 'No se encontró el local asociado.' })
+    res.json({ business })
   } catch (error) {
     if (error.status === 409) return res.status(409).json({ error: error.message })
     next(error)

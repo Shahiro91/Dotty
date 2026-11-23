@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs'
 import { pool } from '../../database/pool.js'
 import { BILLING_INITIAL_TRIAL_DAYS } from '../billing/billing.rules.js'
+import { businessSlug } from './business.rules.js'
 import { applicationExists, associateOwner, createApplicationCustomer, customerExists, insertApplication, insertBusiness, markApplicationClaimed, restartTrial } from './applications.repository.js'
 
 export async function registerLocalApplication(input) {
@@ -37,11 +38,8 @@ export async function registerLocalApplication(input) {
 export async function activateLocalApplication(client, application, customerId) {
   let businessId = application.business_id
   if (!businessId) {
-    const nameSlug = application.business_name.normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'local'
     const suffix = `-${application.id}`
-    const slug = `${nameSlug.slice(0, 120 - suffix.length)}${suffix}`
+    const slug = businessSlug(application.business_name, suffix)
     businessId = await insertBusiness(client, application, slug, BILLING_INITIAL_TRIAL_DAYS)
   } else {
     await restartTrial(client, businessId, BILLING_INITIAL_TRIAL_DAYS)

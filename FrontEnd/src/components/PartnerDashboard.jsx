@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { AlertCircle, ArrowLeft, BarChart3, Check, ChevronDown, ChevronRight, CircleDollarSign, Copy, CreditCard, Eye, FileSpreadsheet, FolderOpen, History, ImagePlus, LoaderCircle, LogOut, Megaphone, Menu, MessageCircle, Package, Pencil, Plus, Printer, RefreshCw, Save, Sparkles, Store, ToggleLeft, ToggleRight, Trash2, Users, UserPlus, X } from 'lucide-react'
+import { AlertCircle, ArrowLeft, ArrowRight, BarChart3, Check, ChevronDown, ChevronRight, CircleDollarSign, Copy, CreditCard, Eye, FileSpreadsheet, FolderOpen, GripVertical, History, ImagePlus, LoaderCircle, LogOut, Megaphone, Menu, MessageCircle, Package, Pencil, Plus, Printer, RefreshCw, Save, Sparkles, Store, ToggleLeft, ToggleRight, Trash2, Users, UserPlus, X } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 import { apiRequest } from '../lib/api.js'
 import { businessFontOptions, getBusinessFontVariables } from '../lib/businessStyle.js'
@@ -184,6 +184,7 @@ function PartnerDashboard({ token, user, onSignOut }) {
   const [isCreatingCategory, setIsCreatingCategory] = useState(false)
   const [categoryDraft, setCategoryDraft] = useState('')
   const [categoryPartsDraft, setCategoryPartsDraft] = useState('0')
+  const [isReorderingCategories, setIsReorderingCategories] = useState(false)
   const [editingRewardId, setEditingRewardId] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
@@ -193,6 +194,7 @@ function PartnerDashboard({ token, user, onSignOut }) {
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const cropDragRef = useRef(null)
+  const draggedCategoryRef = useRef(null)
 
   useEffect(() => {
     window.sessionStorage.setItem(sectionStorageKey, section)
@@ -413,7 +415,9 @@ function PartnerDashboard({ token, user, onSignOut }) {
       setBusiness((current) => ({ ...result.business, promoVideos: current.promoVideos || [] }))
       setColorDrafts({ primaryColor: result.business.primaryColor, secondaryColor: result.business.secondaryColor })
       setOpeningHoursSchedule(parseOpeningSchedule(result.business.openingHours))
-      flash('Perfil del local actualizado.')
+      flash(result.business.slug !== business.slug
+        ? 'Perfil actualizado. El link cambió: compartí el nuevo con tus clientes.'
+        : 'Perfil del local actualizado.')
     } catch (saveError) { setError(saveError.message) } finally { setIsSaving(false) }
   }
 
@@ -557,11 +561,11 @@ function PartnerDashboard({ token, user, onSignOut }) {
     setBusyCategory(editingCategory)
     setError('')
     try {
-      await apiRequest('/partner/categories', {
+      const result = await apiRequest('/partner/categories', {
         method: 'PATCH', token,
         body: { currentName: editingCategory, name: nextName, fractionalParts },
       })
-      setCategories((current) => current.map((category) => category.name === editingCategory ? { ...category, name: nextName, fractionalParts } : category).sort((first, second) => first.name.localeCompare(second.name, 'es')))
+      setCategories(result.categories)
       setProducts((current) => current.map((product) => product.category === editingCategory ? { ...product, category: nextName } : product))
       setSelectedCategory((current) => current === editingCategory ? nextName : current)
       setProductDraft((current) => current.category === editingCategory ? { ...current, category: nextName } : current)
@@ -583,7 +587,7 @@ function PartnerDashboard({ token, user, onSignOut }) {
     setError('')
     try {
       const result = await apiRequest('/partner/categories', { method: 'POST', token, body: { name, fractionalParts: Number(categoryPartsDraft) } })
-      setCategories((current) => [...current, result.category].sort((first, second) => first.name.localeCompare(second.name, 'es')))
+      setCategories(result.categories)
       setCategoryDraft('')
       setCategoryPartsDraft('0')
       setIsCreatingCategory(false)
@@ -602,17 +606,29 @@ function PartnerDashboard({ token, user, onSignOut }) {
     setError('')
     try {
       const result = await apiRequest('/partner/categories', { method: 'DELETE', token, body: { name: category } })
-      setCategories((current) => {
-        const remaining = current.filter((item) => item.name !== category)
-        if (result.productsMoved > 0 && !remaining.some((item) => item.name === result.category)) remaining.push({ name: result.category, productCount: result.productsMoved })
-        return remaining.sort((first, second) => first.name.localeCompare(second.name, 'es'))
-      })
+      setCategories(result.categories)
       setProducts((current) => current.map((product) => product.category === category ? { ...product, category: fallbackCategory } : product))
       setSelectedCategory(null)
       setEditingCategory(null)
       setCategoryDraft('')
       flash(result.productsMoved > 0 ? `Productos movidos a ${fallbackCategory}.` : 'Categoría eliminada.')
     } catch (deleteError) { setError(deleteError.message) } finally { setBusyCategory(null) }
+  }
+
+  async function moveCategory(name, targetIndex) {
+    if (isReorderingCategories || isCreatingCategory || editingCategory || busyCategory || isSaving) return
+    const sourceIndex = categories.findIndex((category) => category.name === name)
+    if (sourceIndex < 0 || targetIndex < 0 || targetIndex >= categories.length || sourceIndex === targetIndex) return
+    const ordered = [...categories]
+    ordered.splice(targetIndex, 0, ordered.splice(sourceIndex, 1)[0])
+    setIsReorderingCategories(true)
+    setError('')
+    setMessage('')
+    try {
+      const result = await apiRequest('/partner/categories/order', { method: 'PUT', token, body: { categories: ordered.map((category) => category.name) } })
+      setCategories(result.categories)
+      flash('Orden de categorías actualizado.')
+    } catch (requestError) { setError(requestError.message) } finally { setIsReorderingCategories(false) }
   }
 
   async function saveReward(event) {
@@ -859,6 +875,7 @@ function PartnerDashboard({ token, user, onSignOut }) {
             <div className={styles.sectionHeading}><h2>Identidad y página</h2><p>Estos datos se muestran en la página pública de tu local.</p></div>
             <label className={styles.fieldLabel} htmlFor="business-name">Nombre del local</label>
             <input className={styles.textInput} id="business-name" maxLength={100} value={business.name} onChange={(event) => updateBusiness('name', event.target.value)} required />
+            <small>Al cambiar el nombre y guardar, puede cambiar el link de tu tienda. Si cambia, los links y códigos QR anteriores dejarán de apuntar a tu local; compartí el nuevo.</small>
             <label className={styles.fieldLabel} htmlFor="business-description">Descripción</label>
             <textarea className={styles.textArea} id="business-description" maxLength={1000} rows={3} value={business.description} onChange={(event) => updateBusiness('description', event.target.value)} />
             <label className={styles.fieldLabel} htmlFor="business-address">Dirección</label>
@@ -989,8 +1006,8 @@ function PartnerDashboard({ token, user, onSignOut }) {
           </div>
         </section> : <section className={styles.categoryPage}>
           <header className={styles.categoryPageHeader}>
-            <div><span className={styles.eyebrow}>CATÁLOGO</span><h2>Categorías</h2><p>Organizá el menú antes de cargar los productos.</p></div>
-            <button className={styles.primaryButton} type="button" onClick={() => { setIsCreatingCategory(true); setEditingCategory(null); setCategoryDraft(''); setCategoryPartsDraft('0'); setError('') }} disabled={isCreatingCategory}><Plus size={16} /> Nueva categoría</button>
+            <div><span className={styles.eyebrow}>CATÁLOGO</span><h2>Categorías</h2><p>Arrastrá las categorías o usá las flechas para ordenar el menú de tu tienda.</p></div>
+            <button className={styles.primaryButton} type="button" onClick={() => { setIsCreatingCategory(true); setEditingCategory(null); setCategoryDraft(''); setCategoryPartsDraft('0'); setError('') }} disabled={isCreatingCategory || isReorderingCategories}><Plus size={16} /> Nueva categoría</button>
           </header>
           {isCreatingCategory && <form className={styles.categoryCreateForm} onSubmit={createCategory}>
             <div><label className={styles.fieldLabel} htmlFor="new-category-name">Nombre de la categoría</label><input className={styles.textInput} id="new-category-name" maxLength={60} value={categoryDraft} onChange={(event) => setCategoryDraft(event.target.value)} autoFocus required /></div>
@@ -999,10 +1016,13 @@ function PartnerDashboard({ token, user, onSignOut }) {
             <button className={styles.textButton} type="button" onClick={() => { setIsCreatingCategory(false); setCategoryDraft('') }}>Cancelar</button>
           </form>}
           {categories.length === 0 && !isCreatingCategory ? <p className={styles.empty}>Todavía no hay categorías. Creá una para empezar el menú.</p> : <div className={styles.categoriesGrid}>
-            {categories.map((category) => {
+            {categories.map((category, index) => {
               const coverProduct = products.find((product) => product.category === category.name && product.imageDataUrl)
               const productCount = products.filter((product) => product.category === category.name).length
-              return <article className={styles.categoryCard} key={category.name}>
+              const reorderDisabled = isReorderingCategories || isCreatingCategory || Boolean(editingCategory) || Boolean(busyCategory) || isSaving
+              return <article className={styles.categoryCard} key={category.name}
+                onDragOver={(event) => { if (draggedCategoryRef.current && !reorderDisabled) event.preventDefault() }}
+                onDrop={(event) => { event.preventDefault(); if (draggedCategoryRef.current) moveCategory(draggedCategoryRef.current, index); draggedCategoryRef.current = null }}>
                 {editingCategory === category.name ? <form className={styles.categoryEditForm} onSubmit={saveCategory}>
                   <label className={styles.fieldLabel} htmlFor={`edit-category-${category.name}`}>Nombre de la categoría</label>
                   <input className={styles.textInput} id={`edit-category-${category.name}`} maxLength={60} value={categoryDraft} onChange={(event) => setCategoryDraft(event.target.value)} autoFocus required />
@@ -1014,8 +1034,13 @@ function PartnerDashboard({ token, user, onSignOut }) {
                     <ChevronRight size={18} />
                   </button>
                   <div className={styles.categoryCardActions}>
-                    <button className={styles.iconButton} type="button" title="Editar categoría" aria-label={`Editar categoría ${category.name}`} onClick={() => startEditingCategory(category)}><Pencil size={16} /></button>
-                    <button className={styles.deleteButton} type="button" title="Eliminar categoría" aria-label={`Eliminar categoría ${category.name}`} onClick={() => removeCategory(category.name)}><Trash2 size={16} /></button>
+                    <span className={styles.categoryDragHandle} draggable={!reorderDisabled} title="Arrastrar para ordenar" aria-hidden="true"
+                      onDragStart={(event) => { event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', category.name); draggedCategoryRef.current = category.name }}
+                      onDragEnd={() => { draggedCategoryRef.current = null }}><GripVertical size={18} /></span>
+                    <button className={styles.iconButton} type="button" title="Mover antes" aria-label={`Mover ${category.name} antes`} disabled={reorderDisabled || index === 0} onClick={() => moveCategory(category.name, index - 1)}><ArrowLeft size={16} /></button>
+                    <button className={styles.iconButton} type="button" title="Mover después" aria-label={`Mover ${category.name} después`} disabled={reorderDisabled || index === categories.length - 1} onClick={() => moveCategory(category.name, index + 1)}><ArrowRight size={16} /></button>
+                    <button className={styles.iconButton} type="button" title="Editar categoría" aria-label={`Editar categoría ${category.name}`} disabled={isReorderingCategories} onClick={() => startEditingCategory(category)}><Pencil size={16} /></button>
+                    <button className={styles.deleteButton} type="button" title="Eliminar categoría" aria-label={`Eliminar categoría ${category.name}`} disabled={isReorderingCategories} onClick={() => removeCategory(category.name)}><Trash2 size={16} /></button>
                   </div>
                 </>}
               </article>

@@ -9,10 +9,43 @@ export async function listCategories(businessId) {
        AND products.category = categories.name AND products.is_available = TRUE
      WHERE categories.business_id = $1
      GROUP BY categories.id
-     ORDER BY categories.name`,
+     ORDER BY categories.sort_order ASC NULLS LAST, categories.name`,
     [businessId],
   )
   return rows
+}
+
+export async function reorderCategories(businessId, names) {
+  const client = await pool.connect()
+  let transactionStarted = false
+  try {
+    await client.query('BEGIN')
+    transactionStarted = true
+    const { rows } = await client.query(
+      'SELECT name FROM business_categories WHERE business_id = $1 ORDER BY id FOR UPDATE',
+      [businessId],
+    )
+    const existing = new Set(rows.map((row) => row.name))
+    if (existing.size !== names.length || names.some((name) => !existing.has(name))) {
+      await client.query('ROLLBACK')
+      transactionStarted = false
+      return false
+    }
+    await client.query(
+      `UPDATE business_categories AS categories SET sort_order = ordering.position::integer
+       FROM unnest($2::text[]) WITH ORDINALITY AS ordering(name, position)
+       WHERE categories.business_id = $1 AND categories.name = ordering.name`,
+      [businessId, names],
+    )
+    await client.query('COMMIT')
+    transactionStarted = false
+    return true
+  } catch (error) {
+    if (transactionStarted) await client.query('ROLLBACK')
+    throw error
+  } finally {
+    client.release()
+  }
 }
 
 export async function insertCategory(businessId, name, fractionalParts) {

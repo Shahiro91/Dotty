@@ -31,6 +31,7 @@ const endpointGroups = [
   ['/partner/billing/confirm', 'POST'],
   ['/billing/webhook', 'POST'],
   ['/partner/categories', 'GET', 'POST', 'PATCH', 'DELETE'],
+  ['/partner/categories/order', 'PUT'],
   ['/partner/products', 'GET', 'POST'],
   ['/partner/products/:id', 'PATCH', 'DELETE'],
   ['/partner/products/:id/availability', 'PATCH'],

@@ -320,6 +320,9 @@
 .categoryCardInfo small { color: #777d75; font-size: 10px; }
 .categoryCardOpen > svg { position: absolute; right: 12px; bottom: 19px; color: #788078; }
 .categoryCardActions { padding: 8px 10px; display: flex; justify-content: flex-end; gap: 7px; border-top: 1px solid #ecece5; }
+.categoryDragHandle { min-width: 24px; margin-right: auto; display: flex; align-items: center; justify-content: center; color: #777d75; cursor: grab; }
+.categoryDragHandle:active { cursor: grabbing; }
+.categoryDragHandle[draggable="false"] { opacity: .5; cursor: default; }
 .categoryEditForm { padding: 16px; }
 .categoryEditForm .fieldLabel { margin-top: 0; }
 .categoryDetailHeader { align-items: center; }
@@ -401,6 +404,8 @@
   .categoryCreateForm { align-items: stretch; flex-direction: column; gap: 8px; }
   .categoryCreateForm .textButton { align-self: flex-start; }
   .categoriesGrid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+  .categoryCardActions { padding: 8px 5px; gap: 3px; }
+  .categoryDragHandle { display: none; }
   .colorFields { gap: 8px; }
 }
 @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: .01ms; } }
