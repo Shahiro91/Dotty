@@ -7,6 +7,11 @@ export function businessSlug(name, suffix) {
   return `${base.slice(0, 120 - suffix.length)}${suffix}`
 }
 
+export function slugMatchesBusinessName(name, slug) {
+  const suffixes = ['', slug.match(/-\d+$/)?.[0], slug.match(/-\d+-\d+$/)?.[0]]
+  return suffixes.some((suffix) => suffix !== undefined && businessSlug(name, suffix) === slug)
+}
+
 function getBuenosAiresWeekday() {
   const weekday = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/Argentina/Buenos_Aires',

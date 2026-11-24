@@ -6,12 +6,19 @@ import { createServer } from 'node:net'
 import { test } from 'node:test'
 import bcrypt from 'bcryptjs'
 import pg from 'pg'
-import { businessSlug } from '../src/modules/businesses/business.rules.js'
+import { businessSlug, slugMatchesBusinessName } from '../src/modules/businesses/business.rules.js'
 
 test('store slugs normalize names and retain their unique suffix', () => {
   assert.equal(businessSlug('  Café & Pizzas  ', '-12'), 'cafe-pizzas-12')
   assert.equal(businessSlug('🍕', '-12'), 'local-12')
   assert.equal(businessSlug('a'.repeat(120), '-12'), `${'a'.repeat(117)}-12`)
+})
+
+test('store links match normalized names and existing numeric suffixes', () => {
+  assert.equal(slugMatchesBusinessName('Café 10', 'cafe-10-25'), true)
+  assert.equal(slugMatchesBusinessName('Café 10', 'cafe-10-25-2'), true)
+  assert.equal(slugMatchesBusinessName('Café 10', 'cafe-10'), true)
+  assert.equal(slugMatchesBusinessName('Café Nuevo', 'cafe-viejo-25'), false)
 })
 
 test('renaming a store changes its link without affecting other stores', { skip: !process.env.TEST_DATABASE_URL, timeout: 60000 }, async (t) => {
@@ -83,6 +90,20 @@ test('renaming a store changes its link without affecting other stores', { skip:
   const profile = { name: 'Nombre anterior', bannerDataUrl: 'data:image/png;base64,AA==', primaryColor: '#112233', secondaryColor: '#445566', fontFamily: 'sans' }
   const update = (body) => request('/partner/business', { method: 'PATCH', token, body })
   assert.equal((await update(profile)).data.business.slug, 'enlace-anterior')
+  await db.query("UPDATE businesses SET slug = 'nombre-anterior-987' WHERE id = $1", [business.id])
+  assert.equal((await request('/partner/overview', { token })).data.business.slug, 'nombre-anterior-987')
+  await db.query("UPDATE businesses SET slug = 'enlace-anterior' WHERE id = $1", [business.id])
+  await db.query("INSERT INTO businesses (name, slug) VALUES ('Otro enlace', $1)", [`nombre-anterior-${business.id}`])
+  const overviews = await Promise.all([request('/partner/overview', { token }), request('/partner/overview', { token })])
+  for (const overview of overviews) {
+    assert.equal(overview.status, 200)
+    assert.equal(overview.data.business.slug, `nombre-anterior-${business.id}-2`)
+  }
+  assert.equal(overviews.filter((overview) => overview.data.business.slugUpdated).length, 1)
+  assert.equal((await request('/public/businesses/enlace-anterior')).status, 404)
+  assert.equal((await request(`/public/businesses/${overviews[0].data.business.slug}`)).data.business.name, profile.name)
+  assert.equal((await request('/partner/overview', { token })).data.business.slug, overviews[0].data.business.slug)
+  assert.equal((await update(profile)).data.business.slug, overviews[0].data.business.slug)
   const renamed = await update({ ...profile, name: 'Café Nuevo' })
   assert.equal(renamed.status, 200)
   assert.equal((await applications('approved')).find((item) => item.id === linkedApplication.id).businessName, 'Café Nuevo')

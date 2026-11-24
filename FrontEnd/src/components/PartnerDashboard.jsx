@@ -225,6 +225,7 @@ function PartnerDashboard({ token, user, onSignOut }) {
     setError('')
     apiRequest('/partner/overview', { token })
       .then(async (overviewResult) => {
+        if (overviewResult.business.slugUpdated) setMessage('El link de tu tienda se actualizó con el nombre actual. Compartí el nuevo link; los anteriores y sus códigos QR ya no funcionan.')
         if (!isCurrent) return
         setBusiness(overviewResult.business)
         setColorDrafts({
