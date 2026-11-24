@@ -52,15 +52,15 @@ function App() {
     setAuthRequest(null)
   }
 
+  const storefrontMatch = window.location.pathname.match(/^\/local\/([^/]+)\/?$/)
   if (session?.user?.role === 'admin') {
     return <AdminDashboard token={session.token} onSignOut={signOut} />
   }
-  if (session?.user?.role === 'local_owner') {
-    return <PartnerDashboard token={session.token} user={session.user} onSignOut={signOut} />
-  }
-  const storefrontMatch = window.location.pathname.match(/^\/local\/([^/]+)\/?$/)
   if (storefrontMatch) {
     return <LocalStorefront slug={decodeURIComponent(storefrontMatch[1])} session={session} onAuthenticate={saveSession} onSignOut={signOut} />
+  }
+  if (session?.user?.role === 'local_owner') {
+    return <PartnerDashboard token={session.token} user={session.user} onSignOut={signOut} />
   }
 
   return (
