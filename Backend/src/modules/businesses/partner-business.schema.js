@@ -1,4 +1,5 @@
 import { isValidImageDataUrl } from '../../shared/image.js'
+import { normalizePhone } from '../auth/auth.shared.js'
 
 const businessFontFamilies = new Set(['original', 'sans', 'serif', 'rounded', 'mono'])
 const isValidHexColor = (value) => typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value)
@@ -18,7 +19,9 @@ export function readBusinessInput(body) {
   const deliveryEnabled = body?.deliveryEnabled !== false
   const addonsEnabled = body?.addonsEnabled !== false
   if (!name || name.length > 100 || description.length > 1000 || address.length > 200
-    || openingHours.length > 1000 || whatsapp.length > 20 || !isValidImageDataUrl(logoDataUrl)
+    || openingHours.length > 1000 || whatsapp.length > 20
+    || (whatsapp && !/^\+?[0-9]{8,15}$/.test(normalizePhone(whatsapp)))
+    || !isValidImageDataUrl(logoDataUrl)
     || !isValidImageDataUrl(bannerDataUrl) || !bannerDataUrl
     || !isValidHexColor(primaryColor) || !isValidHexColor(secondaryColor)
     || !Number.isFinite(logoScale) || logoScale < 1 || logoScale > 3

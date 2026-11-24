@@ -377,6 +377,10 @@ function PartnerDashboard({ token, user, onSignOut }) {
   const cropShiftY = (50 - (productDraft.imagePositionY ?? 50)) * productDraft.imageScale * (1 - cropWindowHeight)
   async function saveBusiness(event) {
     event.preventDefault()
+    if (business.whatsapp && !/^\+?[0-9]{8,15}$/.test(business.whatsapp.replace(/[\s()-]/g, ''))) {
+      setError('Ingresá un WhatsApp válido de 8 a 15 dígitos, con código de país.')
+      return
+    }
     if (!isValidHexColor(colorDrafts.primaryColor) || !isValidHexColor(colorDrafts.secondaryColor)) {
       setError('Ingresá colores hexadecimales válidos, por ejemplo #C95031.')
       return
@@ -884,6 +888,7 @@ function PartnerDashboard({ token, user, onSignOut }) {
             <OpeningHoursEditor value={business.openingHours} schedule={openingHoursSchedule} isMobile={isMobile} onChange={setOpeningHoursSchedule} />
             <label className={styles.fieldLabel} htmlFor="business-whatsapp">WhatsApp</label>
             <input className={styles.textInput} id="business-whatsapp" type="tel" maxLength={20} value={business.whatsapp} onChange={(event) => updateBusiness('whatsapp', event.target.value)} />
+            <small>Este número recibe los pedidos. Incluí el código de país, por ejemplo +54 9 11 1234 5678. No cambia el email de acceso.</small>
           </section>
           <section className={styles.formSection}>
             <div className={styles.sectionHeading}><h2>Portada y colores</h2><p>El banner encabeza tu web; el primario marca títulos y botones, el secundario resalta puntos y detalles.</p></div>

@@ -2,7 +2,7 @@ import { pool } from '../../database/pool.js'
 
 export async function findOrderingBusiness(slug) {
   const { rows } = await pool.query(
-    'SELECT id, plan, delivery_enabled AS "deliveryEnabled", addons_enabled AS "addonsEnabled", bonus_points_days AS "bonusPointsDays", referral_enabled AS "referralEnabled", referral_points AS "referralPoints" FROM businesses WHERE slug = $1',
+    'SELECT id, plan, whatsapp, delivery_enabled AS "deliveryEnabled", addons_enabled AS "addonsEnabled", bonus_points_days AS "bonusPointsDays", referral_enabled AS "referralEnabled", referral_points AS "referralPoints" FROM businesses WHERE slug = $1',
     [slug],
   )
   return rows[0]

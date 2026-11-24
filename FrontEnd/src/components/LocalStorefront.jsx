@@ -33,6 +33,7 @@ function calculateCartDiscount(reward, cart) {
 }
 const fulfillmentLabel = (order) => order.fulfillmentType === 'delivery' ? `Delivery - ${order.deliveryAddress}` : 'Retira en el local'
 const formatOrderDate = (value) => new Intl.DateTimeFormat('es-AR', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Argentina/Buenos_Aires' }).format(new Date(value))
+const isValidWhatsapp = (value) => typeof value === 'string' && /^\+?[0-9]{8,15}$/.test(value.replace(/[\s()-]/g, ''))
 const orderTrackingCopy = {
   in_process: { title: 'Pedido recibido', message: 'Esperando la confirmación del local.' },
   confirmed: { title: '¡Pedido confirmado!', message: 'El local ya está preparando tu pedido.' },
@@ -115,6 +116,7 @@ function LocalStorefront({ slug, session, onAuthenticate, onSignOut, isPreview =
   const [trackedOrderId, setTrackedOrderId] = useState(() => window.localStorage.getItem(orderTrackingStorageKey) || '')
   const [trackedOrder, setTrackedOrder] = useState(null)
   const [error, setError] = useState('')
+  const [contactError, setContactError] = useState('')
   const [notice, setNotice] = useState('')
   const [deliveryAddress, setDeliveryAddress] = useState(() => window.localStorage.getItem('sabor-vivo-address') || '')
   const [customerFirstName, setCustomerFirstName] = useState(() => window.localStorage.getItem('sabor-vivo-first-name') || session?.user?.firstName || '')
@@ -431,20 +433,41 @@ function LocalStorefront({ slug, session, onAuthenticate, onSignOut, isPreview =
       window.localStorage.setItem('sabor-vivo-first-name', customerFirstName.trim())
       window.localStorage.setItem('sabor-vivo-last-name', customerLastName.trim())
       onAuthenticate({ ...session, user: result.user })
+      setStoreData((current) => ({ ...current, business: { ...current.business, whatsapp: result.businessWhatsapp } }))
       setCart([])
-      setIsCartOpen(false)
       setSelectedRewardId(null)
       setCustomerNotes('')
       setDeliveryReference('')
       setDeliveryFloor('')
       setDeliveryApartment('')
       setCashAmount('')
-      if (business.whatsapp) {
-        const phone = business.whatsapp.replace(/\D/g, '')
+      if (isValidWhatsapp(result.businessWhatsapp)) {
+        setIsCartOpen(false)
+        const phone = result.businessWhatsapp.replace(/\D/g, '')
         const message = buildWhatsappMessage(result.order, result.user, business)
         window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer')
+      } else {
+        setError('El pedido quedó registrado, pero el local no tiene un número de WhatsApp válido. Contactá al local para confirmar el pedido.')
       }
     } catch (orderError) { setError(orderError.message) } finally { setIsSubmitting(false) }
+  }
+
+  async function openBusinessWhatsapp(event) {
+    if (isPreview) return
+    event.preventDefault()
+    setContactError('')
+    try {
+      const current = await apiRequest(`/public/businesses/${encodeURIComponent(slug)}`)
+      const whatsapp = current.business.whatsapp
+      setStoreData(current)
+      if (!isValidWhatsapp(whatsapp)) {
+        setContactError('El local no tiene un número de WhatsApp válido.')
+        return
+      }
+      window.location.href = `https://wa.me/${whatsapp.replace(/\D/g, '')}`
+    } catch (contactRequestError) {
+      setContactError(contactRequestError.message)
+    }
   }
 
   async function useCurrentLocation() {
@@ -521,8 +544,9 @@ function LocalStorefront({ slug, session, onAuthenticate, onSignOut, isPreview =
           <div className={styles.details}>
             {business.address && <span><MapPin size={15} /> {business.address}</span>}
             {business.openingHours && <span><Clock3 size={15} /> {formatTodaysOpeningHours(business.openingHours)}</span>}
-            {business.whatsapp && <a href={`https://wa.me/${business.whatsapp.replace(/\D/g, '')}`}><MessageCircle size={15} /> WhatsApp</a>}
+            {business.whatsapp && <a href={`https://wa.me/${business.whatsapp.replace(/\D/g, '')}`} onClick={openBusinessWhatsapp}><MessageCircle size={15} /> WhatsApp</a>}
           </div>
+          {contactError && <p role="alert">{contactError}</p>}
         </div>
       </section>
       {business.bonusPointsActiveToday && <div className={styles.bonusNotice}><Award size={16} /><span>Hoy sumás el doble de puntos en todos tus pedidos.</span></div>}

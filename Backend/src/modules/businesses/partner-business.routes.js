@@ -77,15 +77,12 @@ router.get('/public/businesses/:slug/referral-code', authenticate, requireCustom
 
 router.patch('/partner/business', authenticate, requirePartner, async (req, res, next) => {
   const input = readBusinessInput(req.body)
-  if (!input) return res.status(400).json({ error: 'Revisá el perfil, cargá un banner válido y verificá sus opciones visuales.' })
+  if (!input) return res.status(400).json({ error: 'Revisá el perfil, el WhatsApp con código de país, el banner y las opciones visuales.' })
   try {
     const business = await updateBusiness(req.businessId, input)
     if (!business) return res.status(404).json({ error: 'No se encontró el local asociado.' })
     res.json({ business })
-  } catch (error) {
-    if (error.status === 409) return res.status(409).json({ error: error.message })
-    next(error)
-  }
+  } catch (error) { next(error) }
 })
 
 router.patch('/partner/business/options', authenticate, requirePartner, async (req, res, next) => {

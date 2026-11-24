@@ -109,7 +109,6 @@ export async function assignReferralCode(customerId, code) {
 
 export async function updateBusiness(businessId, input) {
   const { name, description, address, openingHours, whatsapp, logoDataUrl, bannerDataUrl, primaryColor, secondaryColor, logoScale, fontFamily, deliveryEnabled, addonsEnabled } = input
-  const phone = whatsapp.replace(/[\s()-]/g, '')
   const client = await pool.connect()
   let transactionStarted = false
   try {
@@ -120,19 +119,6 @@ export async function updateBusiness(businessId, input) {
       await client.query('ROLLBACK')
       transactionStarted = false
       return null
-    }
-    if (/^\+?[0-9]{8,15}$/.test(phone)) {
-      const taken = await client.query(
-        "SELECT 1 FROM customers WHERE phone = $1 AND NOT (business_id = $2 AND role = 'local_owner')",
-        [phone, businessId],
-      )
-      if (taken.rows.length) {
-        const error = new Error('Ese celular ya pertenece a otra cuenta.')
-        error.status = 409
-        throw error
-      }
-      await client.query("UPDATE customers SET phone = $1 WHERE business_id = $2 AND role = 'local_owner'", [phone, businessId])
-      await client.query('UPDATE local_applications SET phone = $1 WHERE business_id = $2', [phone, businessId])
     }
     const { rows } = await client.query(
       `UPDATE businesses SET name = $1, description = $2, address = $3,

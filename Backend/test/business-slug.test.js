@@ -119,6 +119,29 @@ test('renaming a store changes its link without affecting other stores', { skip:
   assert.equal((await update({ ...profile, name: 'Café Nuevo' })).data.business.slug, renamed.data.business.slug)
   assert.equal((await request('/partner/overview', { token })).data.business.slug, renamed.data.business.slug)
   await db.query("INSERT INTO customers (phone, password_hash) VALUES ('87654321', $1)", [hash])
-  assert.equal((await update({ ...profile, name: 'Otro nombre', whatsapp: '87654321' })).status, 409)
-  assert.equal((await request('/partner/overview', { token })).data.business.slug, renamed.data.business.slug)
+  const updatedPhone = await update({ ...profile, name: 'Café Nuevo', whatsapp: '87654321' })
+  assert.equal(updatedPhone.status, 200)
+  assert.equal(updatedPhone.data.business.whatsapp, '87654321')
+  assert.equal((await request(`/public/businesses/${renamed.data.business.slug}`)).data.business.whatsapp, '87654321')
+  const { rows: [owner] } = await db.query("SELECT phone FROM customers WHERE email = 'slug-owner@example.test'")
+  assert.equal(owner.phone, '1234567890')
+  const { rows: [application] } = await db.query('SELECT phone FROM local_applications WHERE id = $1', [linkedApplication.id])
+  assert.equal(application.phone, '1234567890')
+  assert.equal((await request('/auth/login', { body: { identifier: 'slug-owner@example.test', password: 'owner-password', portal: 'partner' } })).status, 200)
+  assert.equal((await update({ ...profile, name: 'Café Nuevo', whatsapp: 'no es un teléfono' })).status, 400)
+  const customerLogin = await request('/auth/phone', { body: { phone: '87654321', businessSlug: renamed.data.business.slug } })
+  assert.equal(customerLogin.status, 200)
+  await db.query("INSERT INTO business_categories (business_id, name) VALUES ($1, 'Pizzas')", [business.id])
+  const orderBody = {
+    businessSlug: renamed.data.business.slug, items: [{ id: storefront.data.products[0].id, quantity: 1 }],
+    customerFirstName: 'Cliente', fulfillmentType: 'pickup', paymentMethod: 'cash',
+  }
+  const firstOrder = await request('/orders', { token: customerLogin.data.token, body: orderBody })
+  assert.equal(firstOrder.status, 201)
+  assert.equal(firstOrder.data.businessWhatsapp, '87654321')
+  const newPhone = '+54 9 11 1234 5678'
+  assert.equal((await update({ ...profile, name: 'Café Nuevo', whatsapp: newPhone })).status, 200)
+  const secondOrder = await request('/orders', { token: customerLogin.data.token, body: orderBody })
+  assert.equal(secondOrder.status, 201)
+  assert.equal(secondOrder.data.businessWhatsapp, newPhone)
 })

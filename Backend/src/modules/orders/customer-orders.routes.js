@@ -35,6 +35,7 @@ router.post('/', authenticate, requireCustomer, async (req, res, next) => {
   let bonusPointsDays = []
   let referralEnabled = false
   let referralPoints = 0
+  let businessWhatsapp = ''
   let productById = menuById
   const addonById = new Map()
   const requiredTwoGroupsByProduct = new Map()
@@ -51,6 +52,7 @@ router.post('/', authenticate, requireCustomer, async (req, res, next) => {
       bonusPointsDays = business.bonusPointsDays
       referralEnabled = business.referralEnabled
       referralPoints = business.referralPoints
+      businessWhatsapp = business.whatsapp
       const products = await listOrderingProducts(businessId)
       productById = new Map(products.map((product) => [String(product.id), product]))
       const requiredGroups = await listRequiredTwoGroups(businessId, business.addonsEnabled)
@@ -91,6 +93,7 @@ router.post('/', authenticate, requireCustomer, async (req, res, next) => {
   const pointsAwarded = basePointsAwarded * (bonusApplied ? 2 : 1)
   try {
     const result = await persistOrder({ customerId: req.customerId, businessId, discountRewardId, productRewardId, subtotal, pointsAwarded, bonusApplied, items, deliveryAddress, paymentMethod, customerNotes, fulfillmentType, deliveryReference, deliveryFloor, deliveryApartment, cashPaymentAmount, deliveryLat, deliveryLng, customerFirstName, customerLastName, referralEnabled, referralPoints, referralCode })
+    if (result.status === 201 && businessId) result.body.businessWhatsapp = businessWhatsapp
     res.status(result.status).json(result.body)
   } catch (error) {
     next(error)
