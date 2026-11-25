@@ -281,6 +281,31 @@ function PartnerDashboard({ token, user, onSignOut }) {
   }, [token])
 
   useEffect(() => {
+    if (section !== 'billing' || isLoading || !billing) return
+    let isCurrent = true
+    function refreshBilling() {
+      if (document.hidden) return
+      apiRequest('/partner/billing', { token })
+        .then((result) => {
+          if (!isCurrent) return
+          const wasRestricted = billing.requiresInitialPayment || billing.status === 'suspended'
+          const isRestricted = result.billing.requiresInitialPayment || result.billing.status === 'suspended'
+          if (wasRestricted && !isRestricted) {
+            window.location.reload()
+            return
+          }
+          setBilling(result.billing)
+        })
+        .catch((requestError) => { if (isCurrent) setError(requestError.message) })
+    }
+    document.addEventListener('visibilitychange', refreshBilling)
+    return () => {
+      isCurrent = false
+      document.removeEventListener('visibilitychange', refreshBilling)
+    }
+  }, [token, section, isLoading, billing])
+
+  useEffect(() => {
     if (isLoading || billing?.requiresInitialPayment) return
     let isCurrent = true
     apiRequest('/partner/stats', { token })
@@ -1417,13 +1442,22 @@ function BillingPanel({ token, billing, setBilling, onPlanChange, isSuspended, o
     : billing.status === 'grace' ? 'Vencida, con plazo para pagar' : 'Al día'
 
   async function pay() {
-    setIsPaying(true)
     onError('')
+    const paymentTab = window.open('', '_blank')
+    if (!paymentTab) {
+      onError('El navegador bloqueó la pestaña de pago. Permití las ventanas emergentes e intentá de nuevo.')
+      return
+    }
+    paymentTab.opener = null
+    setIsPaying(true)
     try {
       const result = await apiRequest('/partner/billing/checkout', { method: 'POST', token })
-      window.location.href = result.url
+      if (paymentTab.closed) throw new Error('La pestaña de pago se cerró. Intentá nuevamente.')
+      paymentTab.location.href = result.url
     } catch (payError) {
+      paymentTab.close()
       onError(payError.message)
+    } finally {
       setIsPaying(false)
     }
   }

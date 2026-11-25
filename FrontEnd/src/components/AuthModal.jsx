@@ -83,7 +83,7 @@ function AuthModal({ user, businessSlug, initialMode = 'login', partnerOnly = fa
                 <input className={styles.passwordInput} id="account-last-name" type="text" autoComplete="family-name" maxLength={60} value={lastName} onChange={(event) => setLastName(event.target.value)} required />
               </>}
               <label htmlFor="account-phone">{partnerOnly ? 'Email' : 'Celular'}</label>
-              <div className={styles.inputWrap}>{partnerOnly ? <Mail size={17} /> : <Phone size={17} />}<input id="account-phone" type={partnerOnly ? 'email' : 'tel'} autoComplete={partnerOnly ? 'username' : 'tel'} inputMode={partnerOnly ? 'email' : 'tel'} placeholder={partnerOnly ? 'nombre@local.com' : '+54 9 11 1234 5678'} value={partnerOnly ? identifier : phone} onChange={(event) => partnerOnly ? setIdentifier(event.target.value) : setPhone(event.target.value)} required /></div>
+              <div className={styles.inputWrap}>{partnerOnly ? <Mail size={17} /> : <Phone size={17} />}<input id="account-phone" type={partnerOnly ? 'email' : 'tel'} autoComplete={partnerOnly ? 'username' : 'tel'} inputMode={partnerOnly ? 'email' : 'tel'} placeholder={partnerOnly ? 'nombre@local.com' : '11 1234 5678'} value={partnerOnly ? identifier : phone} onChange={(event) => partnerOnly ? setIdentifier(event.target.value) : setPhone(event.target.value)} required /></div>
               {mode === 'register' && registrationType === 'local' && <>
                 <label htmlFor="account-business-name">Nombre del local</label>
                 <input className={styles.passwordInput} id="account-business-name" type="text" autoComplete="organization" maxLength={100} value={businessName} onChange={(event) => setBusinessName(event.target.value)} required />
