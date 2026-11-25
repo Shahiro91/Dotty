@@ -1,4 +1,6 @@
-import { ArrowRight, BarChart3, Check, ClipboardList, FileSpreadsheet, Gift, Link2, Palette, Sparkles, Store, UtensilsCrossed } from 'lucide-react'
+import { ArrowRight, BarChart3, Check, ClipboardList, FileSpreadsheet, Gift, Link2, Palette, Sparkles, UtensilsCrossed } from 'lucide-react'
+import dashboardPreview from '../assets/landing-dashboard.png'
+import storefrontPreview from '../assets/landing-store.png'
 import styles from './LandingPage.module.css'
 
 const BRAND_NAME = 'Dotty'
@@ -20,68 +22,24 @@ const steps = [
 
 const plans = [
   { id: 'basic', name: 'Básico', price: '$15.000', items: ['Tienda online con tu link', 'Tablero de pedidos y clientes', 'Puntos y canjes', 'Estadísticas de ventas'] },
-  { id: 'vip', name: 'VIP', price: '$25.000', featured: true, items: ['Todo lo del plan Básico', 'Importación de carta desde Excel', 'Puntos dobles los días que elijas'] },
+  { id: 'vip', name: 'VIP', price: '$25.000', items: ['Todo lo del plan Básico', 'Importación de carta desde Excel', 'Puntos dobles los días que elijas'] },
+  { id: 'vip_plus', name: 'VIP PLUS', price: '$35.000', featured: true, items: ['Todo lo del plan VIP', 'Notificaciones personalizadas para clientes con notificaciones activadas'] },
 ]
 
 function DashboardMockup() {
-  const nav = ['Mi local', 'Productos', 'Canjes', 'Pedidos', 'Clientes', 'Estadísticas']
-  const columns = [
-    { title: 'En proceso', orders: [{ id: '#1024', who: 'Cliente A', total: '$18.400' }, { id: '#1025', who: 'Cliente B', total: '$9.200' }] },
-    { title: 'Enviado', orders: [{ id: '#1023', who: 'Cliente C', total: '$12.800' }] },
-  ]
   return (
     <div className={styles.browser} aria-hidden="true">
-      <div className={styles.browserBar}><i /><i /><i /><span>tulocal.com/panel</span></div>
-      <div className={styles.dash}>
-        <aside className={styles.dashSide}>
-          <b><span className={styles.dot} /> Tu Local</b>
-          {nav.map((item, index) => <span key={item} className={index === 3 ? styles.dashActive : ''}>{item}</span>)}
-        </aside>
-        <div className={styles.dashMain}>
-          <div className={styles.dashTitle}>Pedidos</div>
-          <div className={styles.dashStats}>
-            <div><small>Ventas del mes</small><strong>$482.300</strong></div>
-            <div><small>Pedidos</small><strong>57</strong></div>
-            <div><small>Ticket promedio</small><strong>$8.460</strong></div>
-          </div>
-          <div className={styles.dashColumns}>
-            {columns.map((column) => (
-              <div key={column.title}>
-                <small>{column.title}</small>
-                {column.orders.map((order) => <div className={styles.orderCard} key={order.id}><span>{order.id} · {order.who}</span><b>{order.total}</b></div>)}
-              </div>
-            ))}
-          </div>
-          <div className={styles.dashBars}>{[38, 52, 44, 70, 58, 86, 64].map((height, index) => <i key={index} style={{ height: `${height}%` }} />)}</div>
-        </div>
-      </div>
+      <div className={styles.browserBar}><i /><i /><i /><span>Panel del local</span></div>
+      <img className={styles.dashboardPreview} src={dashboardPreview} alt="" />
     </div>
   )
 }
 
 function StorefrontMockup() {
-  const photo = (id) => `https://images.unsplash.com/photo-${id}?auto=format&fit=crop&w=400&q=80`
-  const products = [
-    { name: 'Plato del día', price: '$9.800', image: photo('1604908176997-125f25cc6f3d') },
-    { name: 'Pizza napolitana', price: '$14.500', image: photo('1579751626657-72bc17010498') },
-    { name: 'Doble smash', price: '$11.500', image: photo('1568901346375-23c9450c58cd') },
-    { name: 'Postre de frutilla', price: '$3.500', image: photo('1488477181946-6428a0291777') },
-  ]
   return (
     <div className={styles.phone} aria-hidden="true">
       <div className={styles.phoneNotch} />
-      <div className={styles.shopBanner} style={{ backgroundImage: `linear-gradient(180deg, rgba(30, 18, 10, .05), rgba(30, 18, 10, .75)), url(${photo('1565299624946-b28f40a0ae38').replace('w=400', 'w=700')})` }}><span><Store size={14} /> Tu Local</span><small>Comida casera · Abierto hoy</small></div>
-      <div className={styles.shopPoints}><Sparkles size={13} /> Sumá puntos con cada pedido</div>
-      <div className={styles.shopGrid}>
-        {products.map((product) => (
-          <div className={styles.shopCard} key={product.name}>
-            <img src={product.image} alt="" loading="lazy" />
-            <b>{product.name}</b>
-            <small>{product.price}</small>
-          </div>
-        ))}
-      </div>
-      <div className={styles.shopCart}>Ver mi pedido <b>$14.700</b></div>
+      <img className={styles.storefrontPreview} src={storefrontPreview} alt="" />
     </div>
   )
 }
@@ -101,7 +59,7 @@ function LandingPage({ onLogin, onRegister }) {
         </nav>
         <div className={styles.headerActions}>
           <button className={styles.ghostButton} type="button" onClick={onLogin}>Ingresar</button>
-          <button className={styles.headerCta} type="button" onClick={onRegister}>Registrar mi local</button>
+          <button className={styles.headerCta} type="button" onClick={() => onRegister()}>Registrar mi local</button>
         </div>
       </header>
 
@@ -112,7 +70,7 @@ function LandingPage({ onLogin, onRegister }) {
             <h1>Vendé online y hacé que tus clientes vuelvan.</h1>
             <p>Creá tu tienda online, recibí pedidos y premiá a tus clientes con puntos. Todo desde un panel simple y con una suscripción mensual fija.</p>
             <div className={styles.heroActions}>
-              <button className={styles.primaryButton} type="button" onClick={onRegister}>Quiero registrar mi local <ArrowRight size={17} /></button>
+              <button className={styles.primaryButton} type="button" onClick={() => onRegister()}>Quiero registrar mi local <ArrowRight size={17} /></button>
               <a className={styles.secondaryButton} href="#funciones">Ver cómo funciona</a>
             </div>
             <ul className={styles.heroPoints}>
@@ -154,7 +112,7 @@ function LandingPage({ onLogin, onRegister }) {
               <li><Check size={16} /> Puntos por cada compra y canjes a tu medida</li>
               <li><Check size={16} /> Pedido listo para enviar por WhatsApp</li>
             </ul>
-            <button className={styles.primaryButton} type="button" onClick={onRegister}>Quiero mi tienda <ArrowRight size={17} /></button>
+            <button className={styles.primaryButton} type="button" onClick={() => onRegister()}>Quiero mi tienda <ArrowRight size={17} /></button>
           </div>
           <div className={styles.showcaseVisual}><StorefrontMockup /></div>
         </section>
@@ -184,7 +142,7 @@ function LandingPage({ onLogin, onRegister }) {
                 <h3>Plan {plan.name}</h3>
                 <p className={styles.price}><strong>{plan.price}</strong> / mes</p>
                 <ul>{plan.items.map((item) => <li key={item}><Check size={15} /> {item}</li>)}</ul>
-                <button className={plan.featured ? styles.primaryButton : styles.outlineButton} type="button" onClick={onRegister}>Elegir plan {plan.name}</button>
+                <button className={plan.featured ? styles.primaryButton : styles.outlineButton} type="button" onClick={() => onRegister(plan.id)}>Elegir plan {plan.name}</button>
               </article>
             ))}
           </div>
@@ -193,7 +151,7 @@ function LandingPage({ onLogin, onRegister }) {
         <section className={styles.cta}>
           <h2>¿Listo para llevar tu local a internet?</h2>
           <p>Registrate y activá tu tienda al instante, con 30 días gratis.</p>
-          <button className={styles.ctaButton} type="button" onClick={onRegister}>Quiero registrar mi local <ArrowRight size={17} /></button>
+          <button className={styles.ctaButton} type="button" onClick={() => onRegister()}>Quiero registrar mi local <ArrowRight size={17} /></button>
         </section>
       </main>
 

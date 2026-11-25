@@ -67,11 +67,12 @@ function App() {
     <>
       <LandingPage
         onLogin={() => setAuthRequest({ mode: 'login', audience: 'partner' })}
-        onRegister={() => setAuthRequest({ mode: 'register' })}
+        onRegister={(plan = '') => setAuthRequest({ mode: 'register', plan })}
       />
       {authRequest && (
         <AuthModal
           initialMode={authRequest.mode}
+          initialPlan={authRequest.plan}
           partnerOnly={authRequest.audience === 'partner'}
           onAuthenticate={saveSession}
           onClose={() => setAuthRequest(null)}

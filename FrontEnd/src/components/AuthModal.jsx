@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { apiRequest } from '../lib/api.js'
 import styles from './AuthModal.module.css'
 
-function AuthModal({ user, businessSlug, initialMode = 'login', partnerOnly = false, onAuthenticate, onClose, onSignOut }) {
+function AuthModal({ user, businessSlug, initialMode = 'login', initialPlan = '', partnerOnly = false, onAuthenticate, onClose, onSignOut }) {
   const [mode, setMode] = useState(initialMode)
   const customerFlow = Boolean(businessSlug) && !partnerOnly
   // Desde la landing (sin local) solo se registran locales; desde la tienda de un local, solo clientes.
@@ -11,7 +11,7 @@ function AuthModal({ user, businessSlug, initialMode = 'login', partnerOnly = fa
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [businessName, setBusinessName] = useState('')
-  const [requestedPlan, setRequestedPlan] = useState('')
+  const [requestedPlan, setRequestedPlan] = useState(initialPlan)
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
